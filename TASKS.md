@@ -180,7 +180,13 @@ X1 testing / X2 lint / X3 docs run throughout.
 - **Deliverable:** `pocs/causal/` + tests.
 - **Done when:** on simulated data it separates true lift from volatility within CI.
 
-### O3 ☐ Cross-engine reconciliation (transparent methodology)
+### O3 ☑ Cross-engine reconciliation (transparent methodology)
+> **Done (POC + live):** `pocs/reconcile/` — 13 tests. Pairwise/mean cited-domain Jaccard (O3.1),
+> per-engine SoV under one documented normalization reusing R2/O1 CIs (O3.2), source-ecosystem
+> divergence explainer (O3.3), auto-generated machine-readable methodology card (O3.4). Live run
+> (`reconcile_live.py`, $0.23): **measured overlap ≈9.6%** (corroborates borrowed ~11%); found
+> **Gemini grounding URLs are redirect wrappers** (excluded from overlap until un-wrapped).
+> Follow-ups: resolve Gemini redirects; multi-repeat run for meaningful SoV.
 - **Why:** every vendor's SoV means something different; ~11% domain overlap ChatGPT↔Perplexity
   (§7.2 #4). Normalize + explain divergence with a disclosed method.
 - **Depends on:** F3, R2.

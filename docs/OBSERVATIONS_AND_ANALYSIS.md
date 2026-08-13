@@ -31,10 +31,13 @@ _Last updated: 2026-08-13._
   run with a *known* 35% citation propensity, R2 recovered `0.375 [0.337, 0.414]` — the true
   value sits inside the 95% interval, and a single-run point score would have hidden that
   uncertainty entirely. This is the thing no competitor ships.
-- **Live engines are verified but lightly exercised.** Real citations have been parsed from all
-  four engines, total spend to date ≈ **$0.065** (of $8.00 available across providers). We have
-  **not** yet run a full multi-engine, multi-repeat measurement on a real brand — so any
-  brand-level competitive claim would be premature and is explicitly deferred.
+- **We have now measured cross-engine disagreement ourselves.** A live O3 run (4 prompts × 4
+  engines, $0.23) put mean cited-domain overlap at **≈9.6%** across the three comparable engines —
+  corroborating the ~11% we had only borrowed — and surfaced a real artifact: Gemini's grounding
+  URLs are redirect wrappers, so its domains aren't comparable without un-wrapping (O-7).
+- **Total live spend to date ≈ $0.30** (of $8.00 across providers). We still have **not** run a
+  full multi-*repeat* measurement on a real brand (the O3 run was 1 repeat, so per-engine SoV is
+  uninformative at that n) — brand-level competitive rankings remain explicitly deferred.
 
 ---
 
@@ -52,7 +55,8 @@ Source: `uv run pytest pocs/<mod> -o addopts=""` per module (§Reproduction R-1)
 | `pocs/onboarding` | R1 prompt-set | 16 | no | ~0.01s |
 | `pocs/metrics` | R2 metrics+CI | 20 | no | ~0.48s |
 | `pocs/keyword_to_prompt` | R3 keyword→prompt | 14 | no | ~0.02s |
-| **Total** | | **114** | | ~2s |
+| `pocs/reconcile` | O3 cross-engine reconcile | 13 | no | ~0.7s |
+| **Total** | | **127** | | ~2s |
 
 100 % of the suite runs **offline** — external APIs are mocked/replayed and the crawler uses
 saved fixtures — so tests never spend budget or touch the network.
@@ -81,6 +85,25 @@ brand-citation propensity = **0.35** (§Reproduction R-3).
 
 Skew guard on the same set: **4/30 branded (13% ≤ 30% ceiling) → OK**; intent split **24/3/3 =
 80/10/10** exactly.
+
+### 2.4 Live cross-engine reconciliation (O3) — our own overlap number
+Source: `pocs/reconcile/reconcile_live.py`, 4 commercial/current-info prompts × 4 engines,
+1 repeat, 2026-08-13 (§Reproduction R-4). **Run cost: $0.233** (cumulative provider spend now
+openai $0.131 · anthropic $0.127 · perplexity $0.028 · gemini $0.012 — all ≪ $2 cap).
+
+| Pair | Cited-domain Jaccard |
+|---|---:|
+| anthropic ∩ perplexity | 0.167 |
+| anthropic ∩ openai | 0.061 |
+| openai ∩ perplexity | 0.060 |
+| gemini ∩ (any) | 0.000 **[artifact — see O-7]** |
+| **Mean, 3 real engines (excl. gemini)** | **0.096** |
+
+**Our measured cross-engine citation overlap ≈ 9.6%** among OpenAI/Perplexity/Anthropic —
+independently corroborating the literature's ~11% (which we had only borrowed). Unique domains
+per engine: perplexity 57 · openai 32 · anthropic 20 · gemini 1 (redirect artifact). SoV at this
+tiny sample is uninformative (n=0–1 prompts per engine hit the brand universe; CIs are
+degenerate/[0,1]) — correctly flagged rather than reported as fact.
 
 ---
 
@@ -112,10 +135,22 @@ queries that put the brand *in the question* — guaranteeing it appears in the 
 guard quantifies this (branded ratio vs a 30% ceiling) and flags it. *Evidence: R-1 tests
 `test_all_branded_set_fails_skew_check`, `test_default_set_passes_skew_check`.*
 
-**O-6 — Cross-engine agreement is low.** **[from external research, not yet our own measurement]**
-Reported ChatGPT↔Perplexity cited-domain overlap is ~11% (RESEARCH.md/COMPETITIVE_LANDSCAPE.md).
-We have the machinery to measure this ourselves (normalized domains from all 4 engines) but have
-**not** run it live yet — so we treat ~11% as a hypothesis to replicate in O3, not our result.
+**O-6 — Cross-engine agreement is low — now measured by us.** **[our measurement, 2026-08-13]**
+On 4 commercial prompts × 4 engines, the mean pairwise cited-domain Jaccard among the three
+comparable engines (OpenAI/Perplexity/Anthropic) was **0.096 (≈9.6%)** — independently
+corroborating the ~11% figure we had only borrowed. Even the *most*-overlapping pair
+(Anthropic↔Perplexity) shared just 16.7% of domains. So "Share of Voice" genuinely is not the
+same object across engines; comparing raw vendor SoV numbers is comparing different webs.
+*Evidence: R-4.*
+
+**O-7 — Gemini grounding hides the real source domain behind a redirect.** **[our measurement]**
+Every Gemini grounding URI is `vertexaisearch.cloud.google.com/grounding-api-redirect/…`, so all
+85 Gemini citations across 4 prompts collapsed to **1 unique "domain"** and showed **0 overlap**
+with every other engine. This is not low agreement — it's a **measurement artifact**: Gemini's
+cited domains are not comparable to other engines' without first *following* the redirect. We now
+exclude Gemini from domain-overlap (and say so in the methodology card) until the redirect is
+resolved. A tool that silently included it would report a fake "Gemini cites nothing you do."
+*Evidence: R-4; cached payloads under `data/cache/gemini/`.*
 
 ---
 
@@ -186,7 +221,8 @@ honesty story; the CI is the output-side half.
 | Metrics carry correct CIs | **Substantiated** (R2 tests + rigor tests; demo recovery). |
 | All 4 engines parse real citations | **Substantiated** (live: Perplexity 14, Anthropic 6). |
 | Budget can never be exceeded | **Substantiated** (guard test: network untouched once over cap). |
-| ~11% cross-engine overlap | **Not ours** — external research; O3 will measure it. |
+| Cross-engine overlap ≈ 9.6% | **Substantiated (ours)** — O3 live run, 3 comparable engines (R-4); corroborates the borrowed ~11%. |
+| Gemini domains need redirect-unwrapping before comparison | **Substantiated (ours)** — O3 live run (O-7); Gemini excluded from overlap for now. |
 | 40–60% monthly citation drift | **Not ours** — external; `citation_drift` can measure it once we have two dated snapshots. |
 | Real-brand competitive ranking | **Not attempted** — needs a full live run; out of scope until then. |
 | Sentiment numbers | **Gated** — reported only after κ ≥ 0.6 on a gold set (not yet collected). |
@@ -207,6 +243,9 @@ cat data/cost_ledger.json
 
 # R-3  honest-headline demo (offline, seeded, reproducible)
 uv run python pocs/metrics/demo.py
+
+# R-4  live cross-engine reconciliation (spends ~$0.23, budget-guarded)
+uv run python pocs/reconcile/reconcile_live.py
 
 uv run ruff check .      # lint clean
 ```

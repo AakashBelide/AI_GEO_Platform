@@ -24,8 +24,9 @@ plan in `TASKS.md`.
 | Onboarding: brand → intent-labeled, skew-checked prompt set | R1 | `pocs/onboarding/` | 16 | No |
 | Core metric set with CIs (mention/citation/SoV/position/sentiment) | R2 | `pocs/metrics/` | 20 | No |
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
+| Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
 
-**Total: 114 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 127 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -46,6 +47,24 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-13 — O3 (cross-engine reconciliation) built + first LIVE measurement
+- **O3 `pocs/reconcile/` (13 tests, offline).** Cross-engine citation overlap (pairwise Jaccard),
+  per-engine SoV under one documented normalization (reuses R2/O1 CIs), a source-ecosystem
+  divergence explainer, and an auto-generated machine-readable **methodology card**.
+- **Live run** (`reconcile_live.py`, 4 commercial prompts × 4 engines, 1 repeat, **$0.233**):
+  - **Our own measured cross-engine overlap ≈ 9.6%** (mean pairwise Jaccard among OpenAI /
+    Perplexity / Anthropic) — independently **corroborates the borrowed ~11%** from the
+    literature. Top pair Anthropic↔Perplexity = 16.7%; all others 6% or less.
+  - **New finding (O-7): Gemini grounding URLs are redirect wrappers**
+    (`vertexaisearch.cloud.google.com/grounding-api-redirect/…`), so all 85 Gemini citations
+    collapse to **1 unique domain** and show 0 overlap with everyone — a measurement **artifact**,
+    not low agreement. Gemini is now excluded from domain-overlap (stated in the methodology card)
+    until the redirect is resolved. Evidence in `data/cache/gemini/`.
+  - Unique domains/engine: perplexity 57 · openai 32 · anthropic 20 · gemini 1 (artifact).
+  - Per-engine SoV was **uninformative at n=1 repeat** (degenerate CIs) — correctly flagged, not
+    reported as fact. A multi-repeat run is needed for real SoV.
+- Suite now **127 tests**. Cumulative live spend ≈ $0.30 across providers (all ≪ $2 caps).
 
 ### 2026-08-13 — R3 (keyword→prompt) built, offline
 - **R3 `pocs/keyword_to_prompt/` (14 tests).** Turns an SEO keyword list into intent-labeled
@@ -111,9 +130,11 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
 - ~~R1 (onboarding) + R2 (metrics)~~ — **done 2026-08-13** (offline, 36 new tests). Live
   sentiment-judge κ-validation still wants a small hand-labeled gold set + a few judged calls.
 - ~~R3 (keyword→prompt)~~ — **done 2026-08-13** (offline, 14 tests). Milestone 1 (R) complete.
-- Next tasks that need keys: O3 (cross-engine reconciliation), O2 (causal before/after).
-  All will run under the same $2 caps.
-- Tasks buildable now with no keys: app integration (A1) of the passing POCs.
+- ~~O3 (cross-engine reconciliation)~~ — **done 2026-08-13** (13 tests + live run; overlap ≈9.6%
+  measured, Gemini redirect artifact found).
+- Follow-ups: resolve Gemini grounding redirects to real domains (then include it in overlap);
+  a multi-repeat O3 run for meaningful SoV. O2 (causal before/after) still to build (needs keys).
+- Buildable now with no keys: app integration (A1) of the passing POCs.
 
 ## 7. How to reproduce
 ```bash

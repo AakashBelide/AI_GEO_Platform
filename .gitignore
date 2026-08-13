@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────
+# SECRETS & PII — NEVER COMMIT (hard rule)
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+secrets/
+*.key
+*.pem
+credentials*.json
+service-account*.json
+
+# Local raw API responses / captured answers (may contain arbitrary text; keep out of history)
+data/raw/
+data/cache/
+*.sqlite
+*.sqlite3
+*.db
+
+# ─────────────────────────────────────────────────────────────
+# Python
+# ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.uv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+.hypothesis/
+
+# ─────────────────────────────────────────────────────────────
+# Node / JS
+# ─────────────────────────────────────────────────────────────
+node_modules/
+.next/
+dist/
+out/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+
+# ─────────────────────────────────────────────────────────────
+# Playwright
+# ─────────────────────────────────────────────────────────────
+playwright-report/
+test-results/
+.playwright/
+
+# ─────────────────────────────────────────────────────────────
+# OS / editor
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+*.log

@@ -21,8 +21,10 @@ plan in `TASKS.md`.
 | Budget guard / cost ledger ($2/provider hard cap) | F3 | `pocs/connectors/budget.py` | 10 | No |
 | Append-only SQLite fact store | F2 | `pocs/factstore/` | 7 | No |
 | Cross-engine citation connectors (4 engines) | F3 | `pocs/connectors/connectors.py` | 13 | Yes (live) |
+| Onboarding: brand → intent-labeled, skew-checked prompt set | R1 | `pocs/onboarding/` | 16 | No |
+| Core metric set with CIs (mention/citation/SoV/position/sentiment) | R2 | `pocs/metrics/` | 20 | No |
 
-**Total: 64 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 100 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -43,6 +45,22 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-13 — R1 (onboarding) + R2 (metrics) built, offline
+- **R1 `pocs/onboarding/` (16 tests).** Brand profile → deterministic, intent-labeled prompt
+  set. Enforces the **80/10/10** informational/commercial/navigational mix (largest-remainder
+  apportionment sums exactly to any `n_total`) and a **branded-skew guard** (≤30% brand-naming
+  prompts, else flagged) — the two guards competitors skip. Paraphrase variants feed O1's
+  variance design. Pure/deterministic; LLM-drafting is an injectable, un-networked `Callable`.
+- **R2 `pocs/metrics/` (20 tests).** Mention / citation / SoV / position — each returned as an
+  `Estimate` **with a 95% CI**, reusing `pocs/rigor` (no duplicated stats). SoV is
+  cluster-bootstrapped over prompts. Sentiment = injectable LLM-judge **validated with Cohen's
+  κ** against a gold set (κ≥0.6 ⇒ trustworthy). Matching is subdomain-aware and substring-safe
+  (`blog.acme.com`✓, `fakeacme.com`✗, `Acme`≠`Acmentor`).
+- **End-to-end demo** (`pocs/metrics/demo.py`, no network): R1 set → 600 synthetic runs → R2
+  recovered the injected 35% citation propensity as `0.360 [0.323, 0.399]` — the CI covers the
+  truth, and a single-run score would have hidden it. This is the platform's honest headline.
+- **Spend: $0.00** (both POCs and the demo are fully offline/synthetic). Suite now **100 tests**.
 
 ### 2026-08-13 — First live smoke test (all 4 engines, 1 short prompt each)
 Prompt: _"What are the top 2 project management tools? Answer in one sentence."_
@@ -81,9 +99,11 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
 
 ## 6. Open items / what I need
 - ~~Perplexity API key returns 401~~ — **resolved 2026-08-13**: replaced key verified (14 citations). All 4 engines live.
-- Next tasks that need keys: R1 (brand → auto-prompts), R2 (metrics: mention/citation/SoV/sentiment),
-  O3 (cross-engine reconciliation), O2 (causal before/after). All will run under the same $2 caps.
-- Tasks buildable now with no keys: finishing O1 integration, R3 (keyword→prompt).
+- ~~R1 (onboarding) + R2 (metrics)~~ — **done 2026-08-13** (offline, 36 new tests). Live
+  sentiment-judge κ-validation still wants a small hand-labeled gold set + a few judged calls.
+- Next tasks that need keys: O3 (cross-engine reconciliation), O2 (causal before/after).
+  All will run under the same $2 caps.
+- Tasks buildable now with no keys: R3 (keyword→prompt), then app integration (A1).
 
 ## 7. How to reproduce
 ```bash

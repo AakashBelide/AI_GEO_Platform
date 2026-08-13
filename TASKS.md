@@ -80,7 +80,10 @@ X1 testing / X2 lint / X3 docs run throughout.
 > These are validated, table-stakes patterns. Reuse (don't reinvent) the definitions;
 > the differentiation is in Milestone 2, not here.
 
-### R1 ☐ Onboarding pattern: brand → auto-prompts → competitors
+### R1 ☑ Onboarding pattern: brand → auto-prompts → competitors
+> **Done (POC):** `pocs/onboarding/` — 16 tests. Deterministic generator (80/10/10 intent
+> split via largest-remainder), branded-skew guard (R1.3), paraphrase variants (R1.5).
+> LLM-drafting (R1.2c) is an injectable `Callable` (not exercised offline). App integration pending (A1).
 - **Why:** industry-standard UX; skipping it feels primitive (§7.1).
 - **Depends on:** F3 (needs an engine to help draft/validate prompts) — but the
   deterministic parts (brand profile, competitor list) can start after F2.
@@ -98,7 +101,11 @@ X1 testing / X2 lint / X3 docs run throughout.
 - **Deliverable:** `pocs/onboarding/` + tests.
 - **Done when:** given a brand, emits a curatable, intent-labeled, skew-checked prompt set.
 
-### R2 ☐ Core metric set (standard definitions)
+### R2 ☑ Core metric set (standard definitions)
+> **Done (POC):** `pocs/metrics/` — 20 tests. Mention/citation/SoV/position each returned as
+> an `Estimate` with a CI (reuses `pocs/rigor`); SoV cluster-bootstrapped over prompts.
+> Sentiment = injectable LLM-judge validated with Cohen's κ vs a gold set (R2.5). R2.6
+> (Princeton PAWC/Subjective Impression) deferred. See `pocs/metrics/demo.py` for the R1→R2 flow.
 - **Why:** users/evaluators expect these exact metrics (§7.1); reuse standard defs.
 - **Depends on:** F2, F3.
 - **Prerequisites:** brand-mention detection strategy (regex + NER + LLM-as-judge fallback).

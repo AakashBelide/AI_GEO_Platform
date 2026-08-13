@@ -51,7 +51,8 @@ Source: `uv run pytest pocs/<mod> -o addopts=""` per module (§Reproduction R-1)
 | `pocs/connectors` | F3 budget + 4 adapters | 23 | no (offline) | ~0.02s |
 | `pocs/onboarding` | R1 prompt-set | 16 | no | ~0.01s |
 | `pocs/metrics` | R2 metrics+CI | 20 | no | ~0.48s |
-| **Total** | | **100** | | ~2s |
+| `pocs/keyword_to_prompt` | R3 keyword→prompt | 14 | no | ~0.02s |
+| **Total** | | **114** | | ~2s |
 
 100 % of the suite runs **offline** — external APIs are mocked/replayed and the crawler uses
 saved fixtures — so tests never spend budget or touch the network.

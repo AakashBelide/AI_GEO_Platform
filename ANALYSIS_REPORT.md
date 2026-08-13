@@ -23,8 +23,9 @@ plan in `TASKS.md`.
 | Cross-engine citation connectors (4 engines) | F3 | `pocs/connectors/connectors.py` | 13 | Yes (live) |
 | Onboarding: brand → intent-labeled, skew-checked prompt set | R1 | `pocs/onboarding/` | 16 | No |
 | Core metric set with CIs (mention/citation/SoV/position/sentiment) | R2 | `pocs/metrics/` | 20 | No |
+| Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 
-**Total: 100 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 114 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -45,6 +46,14 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-13 — R3 (keyword→prompt) built, offline
+- **R3 `pocs/keyword_to_prompt/` (14 tests).** Turns an SEO keyword list into intent-labeled
+  prompts and merges them into the R1 set. Intent is inferred from **whole-token** modifiers
+  (`best`/`pricing`/`vs`/`review`/`buy` → commercial; brand-name → navigational; else
+  informational) so `buyer` never triggers `buy`. Merge de-duplicates on a normalized key
+  (casefold + collapsed whitespace + stripped trailing punctuation), so `crm` and `What is CRM?`
+  don't double-count. Deterministic, no keys. Suite now **114 tests**. Milestone 1 (R) complete.
 
 ### 2026-08-13 — R1 (onboarding) + R2 (metrics) built, offline
 - **R1 `pocs/onboarding/` (16 tests).** Brand profile → deterministic, intent-labeled prompt
@@ -101,9 +110,10 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
 - ~~Perplexity API key returns 401~~ — **resolved 2026-08-13**: replaced key verified (14 citations). All 4 engines live.
 - ~~R1 (onboarding) + R2 (metrics)~~ — **done 2026-08-13** (offline, 36 new tests). Live
   sentiment-judge κ-validation still wants a small hand-labeled gold set + a few judged calls.
+- ~~R3 (keyword→prompt)~~ — **done 2026-08-13** (offline, 14 tests). Milestone 1 (R) complete.
 - Next tasks that need keys: O3 (cross-engine reconciliation), O2 (causal before/after).
   All will run under the same $2 caps.
-- Tasks buildable now with no keys: R3 (keyword→prompt), then app integration (A1).
+- Tasks buildable now with no keys: app integration (A1) of the passing POCs.
 
 ## 7. How to reproduce
 ```bash

@@ -122,7 +122,10 @@ X1 testing / X2 lint / X3 docs run throughout.
 - **Deliverable:** `pocs/metrics/` + tests + a gold-set fixture for sentiment κ.
 - **Done when:** metrics computed deterministically from fact-store rows; κ reported.
 
-### R3 ☐ Keyword → prompt conversion (bootstrapping trick)
+### R3 ☑ Keyword → prompt conversion (bootstrapping trick)
+> **Done (POC):** `pocs/keyword_to_prompt/` — 14 tests. Intent inferred from whole-token
+> modifiers (commercial/navigational/informational), keyword wrapped in per-intent question
+> frames, merged + de-duplicated into an R1 set on a normalized key. Deterministic, no keys.
 - **Why:** cheap way to seed prompts from existing SEO keyword data (§7.1, Otterly/Semrush).
 - **Depends on:** R1.
 - **Prerequisites:** a sample keyword list (public/synthetic — no PII).

@@ -265,9 +265,9 @@ def build_methodology_card(
     base_caveats = [
         "Gemini grounding is a documented PROXY for Google AI Overviews, not the product.",
         "Gemini grounding URIs are 'vertexaisearch.cloud.google.com/grounding-api-redirect/...' "
-        "wrappers, so its cited DOMAINS collapse to one host and are NOT comparable to other "
-        "engines' domains without following the redirect (measured 2026-08-13). Exclude Gemini "
-        "from domain-overlap until un-wrapped.",
+        "wrappers; the real source domain is recovered from web.title (connectors._gemini_domain), "
+        "NOT by following the redirect. So Gemini domains are the publisher hosts as Gemini "
+        "reports them, un-verified against the live redirect target.",
         "Cited-source sets are locale-sensitive; SoV/overlap hold only for the stated locale.",
         "Single-run scores are omitted by design; all rates carry confidence intervals.",
     ]

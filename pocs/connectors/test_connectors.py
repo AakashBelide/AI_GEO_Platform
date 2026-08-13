@@ -95,6 +95,34 @@ def test_parse_gemini_handles_camel_case_too():
     assert [c.domain for c in cites] == ["z.com"]
 
 
+def test_parse_gemini_resolves_redirect_wrapper_via_title():
+    # Real Gemini shape: uri is a vertexaisearch redirect; title holds the true domain.
+    raw = {"candidates": [{
+        "content": {"parts": [{"text": "answer"}]},
+        "grounding_metadata": {"grounding_chunks": [
+            {"web": {"uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AB",
+                     "title": "tech.co"}},
+            {"web": {"uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/CD",
+                     "title": "www.thedigitalprojectmanager.com"}},
+        ]},
+    }]}
+    _, cites = parse_gemini(raw)
+    assert [c.domain for c in cites] == ["tech.co", "thedigitalprojectmanager.com"]
+
+
+def test_parse_gemini_redirect_without_domain_title_keeps_wrapper():
+    # If title isn't a bare domain, fall back to the wrapper host (honest, not fabricated).
+    raw = {"candidates": [{
+        "content": {"parts": [{"text": "a"}]},
+        "grounding_metadata": {"grounding_chunks": [
+            {"web": {"uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/X",
+                     "title": "Some Article Title With Spaces"}},
+        ]},
+    }]}
+    _, cites = parse_gemini(raw)
+    assert cites[0].domain == "vertexaisearch.cloud.google.com"
+
+
 def test_parse_anthropic():
     answer, cites = parse_anthropic(ANTHROPIC_RAW)
     assert "HubSpot and Salesforce lead." in answer

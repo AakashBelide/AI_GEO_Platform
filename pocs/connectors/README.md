@@ -26,16 +26,18 @@ by the frugal live `smoke.py`.
 
 ## Run
 ```bash
-uv run pytest pocs/connectors/ -q          # 23 tests, offline (no keys, no network)
+uv run pytest pocs/connectors/ -q          # 25 tests, offline (no keys, no network)
 uv run python pocs/connectors/smoke.py     # 1 short prompt/engine, budget-gated (spends cents)
 ```
 
 ## Verified live (2026-08-13)
-- **Anthropic** forced web search → **6 citations** parsed (frase.io, dageno.ai, …) for $0.022.
-- OpenAI / Gemini / Anthropic wiring OK and budget-tracked.
-- **Perplexity → 401 Unauthorized** (the provided key is rejected — needs a valid key).
-- Gemini-2.5-flash returns no text/chunks on trivial prompts (thinking-model quirk); parser
-  correctly yields empty. Use commercial/current-info prompts to trigger grounding.
+- **All four engines live-verified** on commercial/current-info prompts (O3 run): OpenAI 38,
+  Perplexity 76, Gemini 85, Anthropic 30 citations across 4 prompts.
+- **Gemini grounding URLs are redirect wrappers** (`vertexaisearch…/grounding-api-redirect/…`);
+  the parser now recovers the real domain from `web.title` (`_gemini_domain`) so Gemini is
+  comparable to the other engines. Gemini-2.5-flash still returns empty on *trivial* prompts
+  (thinking-model quirk) — parser yields empty correctly; use substantive prompts for grounding.
+- Trivial/evergreen prompts don't trigger search (0 citations) — a measurement-design finding.
 
 See `../../ANALYSIS_REPORT.md` for the running log of decisions, costs, and findings.
 

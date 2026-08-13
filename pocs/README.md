@@ -13,14 +13,14 @@ mocked/replayed; crawler uses saved fixtures).
 | `crawler/` | C1 — safe sandbox site crawler + AI-readability audit | No (sandbox) | ☑ 12 tests |
 | `connectors/budget.py` | F3 — budget guard / cost ledger ($2/provider cap) | No | ☑ 10 tests |
 | `factstore/` | F2 — append-only SQLite fact store | No | ☑ 7 tests |
-| `connectors/` | F3 — OpenAI / Perplexity / Gemini / Anthropic adapters | **Yes** | ☑ 13 tests + live-verified |
+| `connectors/` | F3 — OpenAI / Perplexity / Gemini / Anthropic adapters | **Yes** | ☑ 15 tests + live-verified |
 | `onboarding/` | R1 — brand → auto-prompts → competitors | No (deterministic) | ☑ 16 tests |
 | `metrics/` | R2 — mention/citation/SoV/position/sentiment | No (synthetic) | ☑ 20 tests |
 | `keyword_to_prompt/` | R3 — keyword → prompt bootstrap | No | ☑ 14 tests |
 | `reconcile/` | O3 — cross-engine reconciliation | No (offline); live runner optional | ☑ 13 tests + live-verified |
 | `causal/` | O2 — controlled before/after attribution | Yes | ☐ |
 
-**127 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
+**129 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
 `../ANALYSIS_REPORT.md` for the running log of decisions, costs, and live findings.
 Every suite runs fully offline; live engine calls happen only in `connectors/smoke.py`
 under the $2/provider budget guard.

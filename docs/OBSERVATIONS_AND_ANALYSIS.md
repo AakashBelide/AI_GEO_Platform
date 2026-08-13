@@ -32,9 +32,10 @@ _Last updated: 2026-08-13._
   value sits inside the 95% interval, and a single-run point score would have hidden that
   uncertainty entirely. This is the thing no competitor ships.
 - **We have now measured cross-engine disagreement ourselves.** A live O3 run (4 prompts × 4
-  engines, $0.23) put mean cited-domain overlap at **≈9.6%** across the three comparable engines —
-  corroborating the ~11% we had only borrowed — and surfaced a real artifact: Gemini's grounding
-  URLs are redirect wrappers, so its domains aren't comparable without un-wrapping (O-7).
+  engines, $0.23) put mean cited-domain overlap at **≈10.6%** across all four engines —
+  corroborating the ~11% we had only borrowed. Getting there surfaced (and we fixed) a real
+  artifact: Gemini's grounding URLs are redirect wrappers whose real domain lives in `web.title`
+  (O-7); before the fix Gemini looked like it cited a single host.
 - **Total live spend to date ≈ $0.30** (of $8.00 across providers). We still have **not** run a
   full multi-*repeat* measurement on a real brand (the O3 run was 1 repeat, so per-engine SoV is
   uninformative at that n) — brand-level competitive rankings remain explicitly deferred.
@@ -94,16 +95,20 @@ openai $0.131 · anthropic $0.127 · perplexity $0.028 · gemini $0.012 — all 
 | Pair | Cited-domain Jaccard |
 |---|---:|
 | anthropic ∩ perplexity | 0.167 |
+| anthropic ∩ gemini | 0.161 |
+| gemini ∩ perplexity | 0.147 |
 | anthropic ∩ openai | 0.061 |
 | openai ∩ perplexity | 0.060 |
-| gemini ∩ (any) | 0.000 **[artifact — see O-7]** |
-| **Mean, 3 real engines (excl. gemini)** | **0.096** |
+| gemini ∩ openai | 0.037 |
+| **Mean, all 4 engines** | **0.106** |
 
-**Our measured cross-engine citation overlap ≈ 9.6%** among OpenAI/Perplexity/Anthropic —
-independently corroborating the literature's ~11% (which we had only borrowed). Unique domains
-per engine: perplexity 57 · openai 32 · anthropic 20 · gemini 1 (redirect artifact). SoV at this
-tiny sample is uninformative (n=0–1 prompts per engine hit the brand universe; CIs are
-degenerate/[0,1]) — correctly flagged rather than reported as fact.
+**Our measured cross-engine citation overlap ≈ 10.6%** across all four engines — independently
+corroborating the literature's ~11% (which we had only borrowed). Note: the first pass measured
+**9.6%** across only 3 engines because Gemini was a redirect artifact (O-7); after the fix,
+re-parsing the *same cached payloads* (R-5, zero spend) folds Gemini back in and lands at 10.6%.
+Unique domains per engine: perplexity 57 · gemini 52 · openai 32 · anthropic 20. SoV at this tiny
+sample is uninformative (n=0–1 prompts per engine hit the brand universe; CIs are degenerate/[0,1])
+— correctly flagged rather than reported as fact.
 
 ---
 
@@ -136,21 +141,23 @@ guard quantifies this (branded ratio vs a 30% ceiling) and flags it. *Evidence: 
 `test_all_branded_set_fails_skew_check`, `test_default_set_passes_skew_check`.*
 
 **O-6 — Cross-engine agreement is low — now measured by us.** **[our measurement, 2026-08-13]**
-On 4 commercial prompts × 4 engines, the mean pairwise cited-domain Jaccard among the three
-comparable engines (OpenAI/Perplexity/Anthropic) was **0.096 (≈9.6%)** — independently
-corroborating the ~11% figure we had only borrowed. Even the *most*-overlapping pair
-(Anthropic↔Perplexity) shared just 16.7% of domains. So "Share of Voice" genuinely is not the
-same object across engines; comparing raw vendor SoV numbers is comparing different webs.
-*Evidence: R-4.*
+On 4 commercial prompts × 4 engines, the mean pairwise cited-domain Jaccard was **0.106 (≈10.6%)**
+across all four engines (after the O-7 Gemini fix; 0.096 across the three engines that were
+comparable before it) — independently corroborating the ~11% figure we had only borrowed. Even the
+*most*-overlapping pair (Anthropic↔Perplexity) shared just 16.7% of domains. So "Share of Voice"
+genuinely is not the same object across engines; comparing raw vendor SoV numbers is comparing
+different webs. *Evidence: R-4, R-5.*
 
-**O-7 — Gemini grounding hides the real source domain behind a redirect.** **[our measurement]**
-Every Gemini grounding URI is `vertexaisearch.cloud.google.com/grounding-api-redirect/…`, so all
-85 Gemini citations across 4 prompts collapsed to **1 unique "domain"** and showed **0 overlap**
-with every other engine. This is not low agreement — it's a **measurement artifact**: Gemini's
-cited domains are not comparable to other engines' without first *following* the redirect. We now
-exclude Gemini from domain-overlap (and say so in the methodology card) until the redirect is
-resolved. A tool that silently included it would report a fake "Gemini cites nothing you do."
-*Evidence: R-4; cached payloads under `data/cache/gemini/`.*
+**O-7 — Gemini grounding hides the real source domain behind a redirect — found *and fixed*.**
+**[our measurement + fix]** Every Gemini grounding URI is
+`vertexaisearch.cloud.google.com/grounding-api-redirect/…`, so all 85 Gemini citations first
+collapsed to **1 unique "domain"** with **0 overlap** everywhere — a **measurement artifact**, not
+low agreement. Fix (zero-network): the real publisher domain is carried in `web.title`, so the
+parser now reads the domain from `title` when the uri is a redirect wrapper
+(`connectors._gemini_domain`). Re-parsing the *same cached payloads* then yields **52 real Gemini
+domains** and restores its overlap with the other engines (gemini↔perplexity 0.147, gemini↔anthropic
+0.161). A tool that silently kept the wrapper would have reported a fake "Gemini cites nothing you
+do." *Evidence: R-4 + R-5; cached payloads under `data/cache/gemini/`.*
 
 ---
 
@@ -221,8 +228,8 @@ honesty story; the CI is the output-side half.
 | Metrics carry correct CIs | **Substantiated** (R2 tests + rigor tests; demo recovery). |
 | All 4 engines parse real citations | **Substantiated** (live: Perplexity 14, Anthropic 6). |
 | Budget can never be exceeded | **Substantiated** (guard test: network untouched once over cap). |
-| Cross-engine overlap ≈ 9.6% | **Substantiated (ours)** — O3 live run, 3 comparable engines (R-4); corroborates the borrowed ~11%. |
-| Gemini domains need redirect-unwrapping before comparison | **Substantiated (ours)** — O3 live run (O-7); Gemini excluded from overlap for now. |
+| Cross-engine overlap ≈ 10.6% (all 4 engines) | **Substantiated (ours)** — O3 live run + Gemini fix (R-4, R-5); corroborates the borrowed ~11%. |
+| Gemini domains resolved via web.title (redirect not followed) | **Substantiated (ours)** — O-7 fix; Gemini now folded into overlap. Domains are as Gemini reports them, not verified against the live redirect target. |
 | 40–60% monthly citation drift | **Not ours** — external; `citation_drift` can measure it once we have two dated snapshots. |
 | Real-brand competitive ranking | **Not attempted** — needs a full live run; out of scope until then. |
 | Sentiment numbers | **Gated** — reported only after κ ≥ 0.6 on a gold set (not yet collected). |
@@ -246,6 +253,9 @@ uv run python pocs/metrics/demo.py
 
 # R-4  live cross-engine reconciliation (spends ~$0.23, budget-guarded)
 uv run python pocs/reconcile/reconcile_live.py
+
+# R-5  re-derive overlap from CACHED payloads with the Gemini fix (offline, $0)
+uv run python pocs/reconcile/recompute_from_cache.py
 
 uv run ruff check .      # lint clean
 ```

@@ -116,8 +116,36 @@ def parse_perplexity(raw: dict) -> tuple[str, list[Citation]]:
     return answer, citations
 
 
+# Gemini grounding returns REDIRECT-WRAPPED uris on this host, so the uri's domain is
+# always the wrapper, not the real source. The real publisher domain is carried in
+# web.title (verified 2026-08-13). See parse_gemini / _gemini_domain.
+GEMINI_REDIRECT_HOST = "vertexaisearch.cloud.google.com"
+
+
+def _looks_like_domain(s: str | None) -> bool:
+    return bool(s) and " " not in s and "." in s and "/" not in s
+
+
+def _gemini_domain(uri: str | None, title: str | None) -> str | None:
+    """Real publisher domain for a Gemini grounding chunk.
+
+    Gemini wraps every source in a `vertexaisearch.cloud.google.com/grounding-api-redirect/…`
+    URL, so the uri's host is useless for cross-engine comparison. When the uri is a redirect
+    wrapper we take the domain from `web.title` (which holds the bare source domain); otherwise
+    we normalize the uri as usual.
+    """
+    host = normalize_domain(uri)
+    if host == GEMINI_REDIRECT_HOST and _looks_like_domain(title):
+        return normalize_domain(title)
+    return host
+
+
 def parse_gemini(raw: dict) -> tuple[str, list[Citation]]:
-    """Gemini grounding: groundingChunks[].web.{uri,title}. Handles snake/camel."""
+    """Gemini grounding: groundingChunks[].web.{uri,title}. Handles snake/camel.
+
+    Resolves the vertexaisearch redirect wrapper to the real source domain via web.title,
+    so Gemini citations are comparable to the other engines' (Task O3 follow-up).
+    """
     candidates = raw.get("candidates") or []
     if not candidates:
         return "", []
@@ -132,7 +160,8 @@ def parse_gemini(raw: dict) -> tuple[str, list[Citation]]:
     for i, ch in enumerate(chunks, start=1):
         web = (ch or {}).get("web") or {}
         url = _first(web, "uri", "url")
-        citations.append(Citation(url, web.get("title"), normalize_domain(url), i))
+        title = web.get("title")
+        citations.append(Citation(url, title, _gemini_domain(url, title), i))
     return answer, citations
 
 

@@ -20,13 +20,13 @@ plan in `TASKS.md`.
 | Safe site crawler + AI-readability audit | C1 / §7.3 | `pocs/crawler/` | 12 | No |
 | Budget guard / cost ledger ($2/provider hard cap) | F3 | `pocs/connectors/budget.py` | 10 | No |
 | Append-only SQLite fact store | F2 | `pocs/factstore/` | 7 | No |
-| Cross-engine citation connectors (4 engines) | F3 | `pocs/connectors/connectors.py` | 13 | Yes (live) |
+| Cross-engine citation connectors (4 engines) | F3 | `pocs/connectors/connectors.py` | 15 | Yes (live) |
 | Onboarding: brand → intent-labeled, skew-checked prompt set | R1 | `pocs/onboarding/` | 16 | No |
 | Core metric set with CIs (mention/citation/SoV/position/sentiment) | R2 | `pocs/metrics/` | 20 | No |
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 | Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
 
-**Total: 127 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 129 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -47,6 +47,16 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-13 — O3 follow-up: Gemini redirect artifact FIXED (offline, $0)
+- Root cause confirmed: Gemini grounding chunks carry the real publisher domain in **`web.title`**
+  (e.g. `tech.co`, `thedigitalprojectmanager.com`) while `web.uri` is the vertexaisearch redirect.
+- Fix: `connectors._gemini_domain` reads the domain from `title` when the uri is a redirect
+  wrapper (zero network — the redirect is *not* followed). +2 parser tests (connectors → 15).
+- Re-derived overlap from the **same cached payloads** (`recompute_from_cache.py`, R-5, no spend):
+  Gemini now resolves **52 real domains** (was 1), and the **all-4-engine mean overlap = 0.106
+  (≈10.6%)** — an even tighter corroboration of the borrowed ~11%. Gemini↔Perplexity 0.147,
+  Gemini↔Anthropic 0.161. Suite now **129 tests**.
 
 ### 2026-08-13 — O3 (cross-engine reconciliation) built + first LIVE measurement
 - **O3 `pocs/reconcile/` (13 tests, offline).** Cross-engine citation overlap (pairwise Jaccard),
@@ -132,8 +142,8 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
 - ~~R3 (keyword→prompt)~~ — **done 2026-08-13** (offline, 14 tests). Milestone 1 (R) complete.
 - ~~O3 (cross-engine reconciliation)~~ — **done 2026-08-13** (13 tests + live run; overlap ≈9.6%
   measured, Gemini redirect artifact found).
-- Follow-ups: resolve Gemini grounding redirects to real domains (then include it in overlap);
-  a multi-repeat O3 run for meaningful SoV. O2 (causal before/after) still to build (needs keys).
+- ~~Resolve Gemini grounding redirects to real domains~~ — **done** (via `web.title`; now in overlap).
+- Follow-ups: a multi-repeat O3 run for meaningful SoV; O2 (causal before/after) still to build.
 - Buildable now with no keys: app integration (A1) of the passing POCs.
 
 ## 7. How to reproduce

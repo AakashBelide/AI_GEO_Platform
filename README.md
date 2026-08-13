@@ -10,11 +10,17 @@ reconciliation.**
 
 - **`RESEARCH.md`** — the research report and thesis (evidence-tiered).
 - **`COMPETITIVE_LANDSCAPE.md`** — teardown of ~28 competitor tools + what's buildable solo.
+- **`docs/OBSERVATIONS_AND_ANALYSIS.md`** — standing analysis: observations, interpretation,
+  measured metrics, and clearly-labeled opinions (each number cites a reproduction script).
+- **`ANALYSIS_REPORT.md`** — running log of dated decisions, costs, and live findings.
 - **`Claude_Research.md`** — an earlier research document (preserved from the remote repo).
 - **`TASKS.md`** — the concrete build plan and task graph.
 
 ## Status
-🟡 Early scaffolding. Building POCs first (see `pocs/`), then integrating into `app/`.
+🟢 Core loop working: **100 tests passing, ruff-clean.** POCs built for F2/F3 (fact store +
+4-engine connectors under a $2/provider budget guard), O1 (statistical rigor), C1 (safe
+crawler), R1 (onboarding), R2 (metrics with confidence intervals). Live-verified on all four
+engines (≈$0.065 spent of $8.00). Next: R3, then app integration. See `pocs/` and `TASKS.md`.
 
 ## Requirements (already on the dev machine — no new global installs)
 - Python 3.13 + [uv](https://docs.astral.sh/uv/)

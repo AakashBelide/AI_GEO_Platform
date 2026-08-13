@@ -9,16 +9,18 @@ mocked/replayed; crawler uses saved fixtures).
 
 | POC | Task | Needs API keys? | Status |
 |---|---|---|---|
-| `rigor/` | O1 — statistical rigor (Wilson CIs, variance, drift) | No (synthetic) | ◐ building |
-| `crawler/` | C1 — safe sandbox site crawler + AI-readability audit | No (sandbox) | ☐ |
-| `factstore/` | F2 — append-only SQLite fact store | No | ☐ |
-| `connectors/` | F3 — OpenAI / Perplexity / Gemini adapters | **Yes** | ☐ blocked |
+| `rigor/` | O1 — statistical rigor (Wilson CIs, variance, drift) | No (synthetic) | ☑ 22 tests |
+| `crawler/` | C1 — safe sandbox site crawler + AI-readability audit | No (sandbox) | ☑ 12 tests |
+| `connectors/budget.py` | F3 — budget guard / cost ledger ($2/provider cap) | No | ☑ 10 tests |
+| `factstore/` | F2 — append-only SQLite fact store | No | ☑ 7 tests |
+| `connectors/` | F3 — OpenAI / Perplexity / Gemini / Anthropic adapters | **Yes** | ☑ 13 tests + live-verified |
 | `onboarding/` | R1 — brand → auto-prompts → competitors | Yes (light) | ☐ |
 | `metrics/` | R2 — mention/citation/SoV/position/sentiment | Yes (light) | ☐ |
 | `keyword_to_prompt/` | R3 — keyword → prompt bootstrap | No | ☐ |
 | `reconcile/` | O3 — cross-engine reconciliation | Yes | ☐ |
 | `causal/` | O2 — controlled before/after attribution | Yes | ☐ |
 
-See `../TASKS.md` for full subtasks, dependencies, and the execution order. POCs that need
-keys are blocked until `.env` is filled locally; `rigor/` and `crawler/` proceed now with no
-keys and no IP risk.
+**64 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
+`../ANALYSIS_REPORT.md` for the running log of decisions, costs, and live findings.
+Every suite runs fully offline; live engine calls happen only in `connectors/smoke.py`
+under the $2/provider budget guard.

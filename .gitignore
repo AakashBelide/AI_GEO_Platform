@@ -10,9 +10,9 @@ secrets/
 credentials*.json
 service-account*.json
 
-# Local raw API responses / captured answers (may contain arbitrary text; keep out of history)
-data/raw/
-data/cache/
+# Local run artifacts: raw API responses, cached answers, cost ledger, DBs.
+# (may contain arbitrary web text and spend state; keep out of history)
+data/
 *.sqlite
 *.sqlite3
 *.db

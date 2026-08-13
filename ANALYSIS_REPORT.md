@@ -60,7 +60,13 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
   midastouchinfotech.com, thatmarketingbuddy.com, dageno.ai — with titles + positions.
 - Cost $0.0218. Confirms the full loop: budget guard → live call → parse → cost record.
 
-**Spend so far (of $2.00 each):** OpenAI ~$0.025 · Gemini ~$0.0001 · Anthropic ~$0.034 · Perplexity $0.
+### 2026-08-13 — Perplexity key replaced & verified
+- New `PERPLEXITY_API_KEY` works: `sonar` forced-search parsed **14 citations** (Profound,
+  dageno.ai, surmado.com, reddit.com, …) for $0.0055. **All 4 engines now live-verified.**
+- Note: Perplexity returned Spanish-language results/sources for this session → **locale/geo
+  affects the cited source set.** The prompt set (R1) should pin locale explicitly.
+
+**Spend so far (of $2.00 each):** OpenAI ~$0.025 · Gemini ~$0.0001 · Anthropic ~$0.034 · Perplexity ~$0.006.
 
 ### Learnings
 1. **Citation extraction depends on the model actually searching.** Trivial/evergreen prompts
@@ -74,8 +80,7 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
    Anthropic data — the atomic core of the platform works.
 
 ## 6. Open items / what I need
-- **Perplexity API key** — the current one returns 401. Replace it in `.env` (`PERPLEXITY_API_KEY=`)
-  to enable the 4th engine. (Do not paste keys into chat — edit `.env` locally.)
+- ~~Perplexity API key returns 401~~ — **resolved 2026-08-13**: replaced key verified (14 citations). All 4 engines live.
 - Next tasks that need keys: R1 (brand → auto-prompts), R2 (metrics: mention/citation/SoV/sentiment),
   O3 (cross-engine reconciliation), O2 (causal before/after). All will run under the same $2 caps.
 - Tasks buildable now with no keys: finishing O1 integration, R3 (keyword→prompt).

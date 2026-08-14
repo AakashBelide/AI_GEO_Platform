@@ -13,7 +13,7 @@ from pathlib import Path
 _POCS = Path(__file__).resolve().parent.parent / "pocs"
 _MODULES = (
     "rigor", "factstore", "connectors", "onboarding",
-    "metrics", "keyword_to_prompt", "reconcile", "crawler",
+    "metrics", "keyword_to_prompt", "reconcile", "crawler", "dashboard",
 )
 
 for _sub in _MODULES:

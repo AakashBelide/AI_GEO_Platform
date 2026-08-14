@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from geo import _csv, _slug, build_parser, render, write_report
+from geo import _csv, _slug, build_parser, cmd_report, render, write_report
 from pipeline import GeoConfig, GeoReport, run_pipeline
 
 CONFIG = GeoConfig(
@@ -131,3 +131,41 @@ def test_geo_report_roundtrips_through_dict():
     rep = run_pipeline(CONFIG, generated_utc="t")
     d = rep.to_dict()
     assert GeoReport(**d).to_dict() == d
+
+
+# --- report subcommand (Task A2 HTML dashboard) ---------------------------- #
+def test_parser_report_subcommand_wiring():
+    args = build_parser().parse_args(["report", "--input", "r.json", "--output", "d.html"])
+    assert args.command == "report"
+    assert args.func is cmd_report
+    assert args.input == "r.json" and args.output == "d.html"
+
+
+def test_report_requires_input():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["report", "--output", "d.html"])  # missing --input
+
+
+def test_cmd_report_writes_self_contained_html(tmp_path):
+    rep = run_pipeline(CONFIG, generated_utc="t")
+    json_path = write_report(rep, tmp_path)
+    out_path = tmp_path / "dash.html"
+    args = build_parser().parse_args(
+        ["report", "--input", str(json_path), "--output", str(out_path)]
+    )
+    assert args.func(args) == 0
+    assert out_path.exists()
+    html = out_path.read_text()
+    assert html.lstrip().startswith("<!DOCTYPE html>")
+    assert "<svg" in html
+    assert "Acme Board" in html
+
+
+def test_cmd_report_default_output_path(tmp_path):
+    rep = run_pipeline(CONFIG, generated_utc="t")
+    json_path = write_report(rep, tmp_path)
+    args = build_parser().parse_args(
+        ["report", "--input", str(json_path), "--out-dir", str(tmp_path)]
+    )
+    assert args.func(args) == 0
+    assert (tmp_path / (json_path.stem + ".html")).exists()

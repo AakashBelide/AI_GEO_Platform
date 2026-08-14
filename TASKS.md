@@ -251,7 +251,12 @@ X1 testing / X2 lint / X3 docs run throughout.
 - **Done when:** end-to-end: brand in → prompts → multi-engine runs → fact store → metrics
   **with CIs** → cross-engine report + methodology card.
 
-### A2 ☐ Reporting / dashboard (local)
+### A2 ☑ Reporting / dashboard (local)
+> **Done:** `pocs/dashboard/` (15 tests) + `geo report` subcommand (4 tests). GeoReport JSON →
+> one self-contained HTML file (inline CSS/SVG, no server/JS/network). Honesty-first: CI bands on
+> every rate, synthetic-run banner, mention-vs-citation gap callout, cross-engine
+> two-proportion-test distinguishability verdicts, verbatim methodology card. Real artifact at
+> `data/reports/asana_2026-08-14.html`. Drift chart deferred (needs two dated snapshots).
 - **Depends on:** A1. Tech TBD (start with static HTML/matplotlib; optional Next/React later).
 - **Subtasks:** per-brand citation frequency **with Wilson CIs**; SoV by engine; cross-engine
   overlap chart; drift chart; "not statistically distinguishable" callouts.

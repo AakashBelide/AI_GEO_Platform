@@ -29,6 +29,14 @@ uv run python app/geo.py run --brand "Asana" --category "..." \
 Key flags: `--engines` (default all four), `--prompts` (30), `--repeats` (5), `--seed`,
 `--locale`, `--out-dir` (default `data/reports/`), `--live`.
 
+```bash
+# Render a saved JSON report into a self-contained HTML dashboard (Task A2, pocs/dashboard)
+uv run python app/geo.py report --input data/reports/asana_2026-08-14.json
+# -> writes data/reports/asana_2026-08-14.html; open it in any browser (no server needed)
+```
+The dashboard shows every rate with its 95% CI, flags the mention-vs-citation gap, gives
+two-proportion-test distinguishability verdicts, and renders the methodology card verbatim.
+
 ## Safety / honesty
 - **Dry-run is the default and spends nothing.** Live requires the explicit `--live` flag and
   runs under the same `CostLedger` guard the connectors use — a provider can never exceed $2.

@@ -25,9 +25,10 @@ plan in `TASKS.md`.
 | Core metric set with CIs (mention/citation/SoV/position/sentiment) | R2 | `pocs/metrics/` | 20 | No |
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 | Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
-| End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 16 | No (offline); `--live` optional |
+| End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 20 | No (offline); `--live` optional |
+| Local HTML dashboard (CI bars, gap callout, distinguishability) | A2 | `pocs/dashboard/` | 15 | No |
 
-**Total: 145 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 164 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -48,6 +49,19 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-14 — A2: local HTML dashboard (visual, offline, no server)
+- **`pocs/dashboard/` (15 tests) + `geo report` subcommand (4 tests).** Renders a saved GeoReport
+  JSON into ONE self-contained HTML file — inline CSS + hand-written SVG, no network/JS/CDN, opens
+  directly in a browser. Honesty-first visuals: every rate is a **point + 95% CI band** (never a
+  bare score); a synthetic dry-run is loudly banner-flagged as "not a real measurement"; the
+  **mention-vs-citation gap** is highlighted in red per engine; cross-engine pairs get a
+  **two-proportion-test distinguishability verdict** (refuses to imply a within-noise difference);
+  the methodology card + caveats render verbatim. Reuses `pocs/rigor` via the sys.path shim.
+- Generated the real artifact: `data/reports/asana_2026-08-14.html` (30 KB, 20 inline SVGs, 0
+  external asset links). On it, OpenAI & Anthropic are flagged "mentioned, not cited", and
+  anthropic-vs-openai citation rate is correctly marked "NOT distinguishable (within noise)".
+- Usage: `uv run python app/geo.py report --input data/reports/<file>.json`. Suite now **164 tests**.
 
 ### 2026-08-14 — First full LIVE brand run (Asana) — the headline finding
 Ran the whole pipeline live: `geo run --brand Asana … --live`, 10 prompts × 5 repeats × 4 engines

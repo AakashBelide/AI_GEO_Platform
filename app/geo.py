@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import _paths  # noqa: F401  (side effect: put pocs/* on sys.path)
+from dashboard import render_dashboard
 from pipeline import GeoConfig, GeoReport, run_pipeline
 
 
@@ -128,6 +129,23 @@ def cmd_run(args) -> int:
     return 0
 
 
+def _default_html_path(input_path: Path, out_dir: Path) -> Path:
+    return out_dir / (input_path.stem + ".html")
+
+
+def cmd_report(args) -> int:
+    """Render a saved JSON GeoReport into a self-contained HTML dashboard (Task A2)."""
+    input_path = Path(args.input)
+    report = json.loads(input_path.read_text())
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = Path(args.output) if args.output else _default_html_path(input_path, out_dir)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(render_dashboard(report))
+    print(f"HTML dashboard written: {out_path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="geo", description="Measurement-honest GEO platform.")
     sub = p.add_subparsers(dest="command", required=True)
@@ -147,6 +165,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--seed", type=int, default=0)
     run.add_argument("--out-dir", default="data/reports")
     run.set_defaults(func=cmd_run)
+
+    rep = sub.add_parser("report", help="render a saved JSON report into an HTML dashboard")
+    rep.add_argument("--input", required=True, help="path to a GeoReport JSON file")
+    rep.add_argument("--output", help="HTML output path (default: <input>.html in --out-dir)")
+    rep.add_argument("--out-dir", default="data/reports",
+                     help="directory for the default output path (default: data/reports)")
+    rep.set_defaults(func=cmd_report)
     return p
 
 

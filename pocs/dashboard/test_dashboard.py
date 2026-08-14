@@ -1,11 +1,12 @@
 """Offline tests for the DARK reporting dashboard POC (Task A2). No network, no keys.
 
 Builds a small synthetic GeoReport dict fixture (same shape as `app/pipeline.py`
-emits) and asserts the rendered HTML carries every honesty-first element in its new
-Tailwind + Chart.js form: the CDN script tags, the injected JSON data blob, the
-`<canvas>` chart mounts, the mention-vs-citation gap callout, a distinguishability
-verdict, the methodology caveats, the CSS-grid overlap heatmap, and the evidence
-transcript — plus the empty-reconciliation / single-engine / missing-field edge cases.
+emits) and asserts the rendered HTML carries every honesty-first element in its
+Tailwind + D3 v7 form: the D3 CDN script tag (and that Chart.js is gone), the injected
+JSON data blob, the D3 SVG chart mounts (dumbbell gap / three CI dot-plots / per-engine
+top-domain small multiples / overlap heatmap), the mention-vs-citation gap callout, a
+distinguishability verdict, the methodology caveats, and the evidence transcript — plus
+the empty-reconciliation / single-engine / missing-field edge cases.
 """
 
 from __future__ import annotations
@@ -119,13 +120,15 @@ def _report() -> dict:
     }
 
 
-# --- shell: doctype + CDNs + data blob + canvases --------------------------- #
-def test_render_is_html_document_with_cdn_assets():
+# --- shell: doctype + CDNs (D3, not Chart.js) + data blob + SVG mounts ------- #
+def test_render_is_html_document_with_d3_cdn_and_no_chartjs():
     html = render_dashboard(_report())
     assert html.lstrip().startswith("<!DOCTYPE html>")
     # the CDNs are now expected (the user chose CDN delivery) — not forbidden.
     assert "https://cdn.tailwindcss.com" in html
-    assert "https://cdn.jsdelivr.net/npm/chart.js@4" in html
+    # ALL-D3: the D3 v7 CDN is present and Chart.js is gone entirely.
+    assert "cdn.jsdelivr.net/npm/d3" in html
+    assert "chart.js" not in html.lower()
 
 
 def test_injected_json_data_blob_present_with_brand():
@@ -144,12 +147,18 @@ def test_json_blob_has_no_unescaped_script_close():
     assert "</script><script>alert(1)" not in html  # escaped as <\/script> inside the blob
 
 
-def test_canvas_chart_mounts_exist():
+def test_d3_svg_chart_mounts_and_build_script_exist():
     html = render_dashboard(_report())
-    assert "<canvas" in html
-    assert 'id="chart-gap"' in html  # the headline gap chart
-    assert 'id="chart-ci-citation"' in html  # a CI rate chart
-    assert 'class="top-canvas"' in html  # per-engine top-domain small multiples
+    # the D3 build script reads the blob and renders SVG (no <canvas> anywhere now).
+    assert "<canvas" not in html
+    assert "<svg" in html  # server-rendered SVG mounts D3 populates
+    assert "typeof d3" in html  # the D3 build script guard is present
+    assert 'id="chart-gap"' in html  # the headline dumbbell mount
+    assert 'id="chart-ci-mention"' in html  # a CI dot-plot mount
+    assert 'id="chart-ci-citation"' in html
+    assert 'id="chart-ci-sov"' in html
+    assert 'id="chart-heatmap"' in html  # the D3 overlap heatmap mount
+    assert 'class="top-chart geo-chart"' in html  # per-engine top-domain small multiples
 
 
 # --- content: brand / category ---------------------------------------------- #
@@ -197,12 +206,15 @@ def test_reconciliation_overlap_and_unique_domains():
     assert "reddit" in html
 
 
-def test_overlap_heatmap_cells_render():
+def test_overlap_heatmap_mount_and_data_present():
     html = render_dashboard(_report())
-    # the CSS-grid heatmap draws a value cell for the pair and interpolates the colour.
-    assert "grid-template-columns:" in html
-    assert "rgba(34,211,238," in html  # a value-interpolated cell background
-    assert ">0.04<" in html  # the pairwise Jaccard value shown in a cell
+    # the D3 heatmap mounts into this container and draws the matrix from the JSON blob.
+    assert 'id="chart-heatmap"' in html
+    assert "drawHeatmap" in html  # the D3 heatmap builder is present
+    # the pairwise Jaccard value + both engine labels ship in the injected blob.
+    assert "0.04" in html  # the openai|perplexity pairwise Jaccard
+    assert "openai|perplexity" in html  # the pairwise key the heatmap reads
+    assert "openai" in html and "perplexity" in html  # engine labels
 
 
 # --- distinguishability ----------------------------------------------------- #
@@ -255,10 +267,10 @@ def test_prompts_used_section_lists_prompts_with_intent():
 def test_top_domains_data_reaches_the_client():
     html = render_dashboard(_report())
     assert "Top cited domains per engine" in html
-    # the values are drawn by Chart.js from the JSON blob; the domains/counts live there.
+    # the values are drawn by D3 from the JSON blob; the domains/counts live there.
     assert "techradar.com" in html
     assert "reddit.com" in html
-    assert 'data-engine="openai"' in html  # a per-engine canvas mount
+    assert 'data-engine="openai"' in html  # a per-engine D3 small-multiple mount
 
 
 # --- evidence transcript (native details) ----------------------------------- #
@@ -308,7 +320,9 @@ def test_missing_optional_fields_do_not_crash():
     html = render_dashboard(minimal)
     assert "<!DOCTYPE html>" in html
     assert "X" in html
-    assert "<canvas" in html or "no per-engine metrics" in html
+    # no per-engine metrics -> the graceful message; the D3 build script still ships.
+    assert "no per-engine metrics" in html
+    assert "cdn.jsdelivr.net/npm/d3" in html
 
 
 def test_malicious_brand_is_html_escaped():

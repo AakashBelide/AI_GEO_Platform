@@ -18,7 +18,7 @@ mocked/replayed; crawler uses saved fixtures).
 | `metrics/` | R2 — mention/citation/SoV/position/sentiment | No (synthetic) | ☑ 20 tests |
 | `keyword_to_prompt/` | R3 — keyword → prompt bootstrap | No | ☑ 14 tests |
 | `reconcile/` | O3 — cross-engine reconciliation | No (offline); live runner optional | ☑ 13 tests + live-verified |
-| `dashboard/` | A2 — GeoReport → dark Tailwind+Chart.js dashboard | No (render); CDN to view | ☑ 24 tests |
+| `dashboard/` | A2 — GeoReport → dark Tailwind+D3 dashboard | No (render); CDN to view | ☑ 24 tests |
 | `insights/` | A2 — findings + GEO recommendations (evidence-tied) | No | ☑ 20 tests |
 | `causal/` | O2 — controlled before/after attribution | Yes | ☐ |
 

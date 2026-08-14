@@ -175,8 +175,8 @@ def test_cmd_report_writes_self_contained_html(tmp_path):
     assert out_path.exists()
     html = out_path.read_text()
     assert html.lstrip().startswith("<!DOCTYPE html>")
-    assert 'id="geo-report"' in html  # injected report blob for the Chart.js charts
-    assert "<canvas" in html
+    assert 'id="geo-report"' in html  # injected report blob for the D3 charts
+    assert "cdn.jsdelivr.net/npm/d3" in html  # D3 v7 CDN (charts render into SVG)
     assert "Acme Board" in html
 
 

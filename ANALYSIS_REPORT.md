@@ -26,7 +26,7 @@ plan in `TASKS.md`.
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 | Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
 | End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 20 | No (offline); `--live` optional |
-| Dark dashboard (Tailwind+Chart.js: gap chart, CI bands, heatmap, transcript) | A2 | `pocs/dashboard/` | 24 | No |
+| Dark dashboard (Tailwind+D3: dumbbell gap, CI dot-plots, heatmap, transcript) | A2 | `pocs/dashboard/` | 24 | No |
 | Interpretation layer: findings + GEO recommendations (evidence-tied) | A2 | `pocs/insights/` | 20 | No |
 
 **Total: 202 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
@@ -50,6 +50,18 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-14 — A2 charts moved to D3.js (from Chart.js)
+- Swapped the charting layer to **all-D3 (v7, CDN)**; Chart.js removed. D3 draws the honesty
+  visuals properly instead of faking them: the mention-vs-citation gap is now a **dumbbell**
+  (mention ●───● citation per engine; flagged engines red), the per-engine rates are **dot-plots
+  with lo→hi error whiskers + caps** (no visual clamping — degenerate SoV looks wide), top-domains
+  are D3 small-multiple bars, and the overlap is a **D3 heatmap** (sequential color scale + value
+  cells + gradient legend). One shared tooltip; responsive (viewBox + debounced resize redraw);
+  all builders no-op gracefully on missing/single-engine data. Tailwind dark theme unchanged.
+- Kept every honesty element; JSON blob still `</`-escaped, server text HTML-escaped. Dashboard
+  suite still 24 tests (rewritten for D3 mounts); suite **202**, ruff clean. Regenerated
+  `data/reports/asana_2026-08-14.html` (~231 KB, 9 D3-populated SVG mounts).
 
 ### 2026-08-14 — A2 redesign: modern dark dashboard (Tailwind + Chart.js)
 - Rewrote `pocs/dashboard/dashboard.py` into a **dark analytics dashboard**: sticky nav, hero +

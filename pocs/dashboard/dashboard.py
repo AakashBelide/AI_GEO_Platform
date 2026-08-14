@@ -2,17 +2,18 @@
 
 Turns the machine-readable report emitted by `app/geo.py run` (the `GeoReport`
 dataclass in `app/pipeline.py`) into an honesty-first, product-analytics dark dashboard.
-Charts are drawn with **Chart.js** (loaded from a CDN) and the page is styled with
-**Tailwind** (also CDN); the cross-engine overlap heatmap is a reliable server-rendered
-CSS grid (no plugin). The user chose CDN delivery, so the page is internet-required.
+Charts are drawn with **D3.js v7** (loaded from a CDN) into responsive SVG and the page is
+styled with **Tailwind** (also CDN). Every chart — including the cross-engine overlap
+heatmap — is a D3 SVG that reads the injected `#geo-report` JSON. The user chose CDN
+delivery, so the page is internet-required.
 
 Honesty-first choices, mirrored from the rest of the platform:
   * every rate is drawn as a point estimate **with its 95% confidence interval** — never a
     bare score (the project's whole thesis; see RESEARCH.md / `pocs/rigor`). The CI charts
-    use a floating [lo, hi] band + a point marker so wide/degenerate intervals look wide.
+    are dot-plots with lo→hi error whiskers + end caps so wide/degenerate intervals look wide.
   * a synthetic dry-run is loudly flagged as NOT a real measurement.
-  * the "mentioned a lot, cited ~never" gap is the headline (a grouped bar chart + red
-    "mentioned, not cited" flag cards).
+  * the "mentioned a lot, cited ~never" gap is the headline (a dumbbell / connected-dot
+    chart making the gap a visible distance + red "mentioned, not cited" flag cards).
   * cross-engine pairs are checked for statistical distinguishability with the rigor
     POC's `two_proportion_test` — the dashboard refuses to imply a difference within noise.
   * findings / hedged recommendations and the methodology card (incl. the Gemini-redirect
@@ -207,7 +208,7 @@ def _hero(r: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Gap (headline) — Chart.js grouped bar + red flag cards
+# Gap (headline) — D3 dumbbell / connected-dot chart + red flag cards
 # --------------------------------------------------------------------------- #
 def _gap(r: dict) -> str:
     per = r.get("per_engine_metrics") or {}
@@ -251,7 +252,7 @@ def _gap(r: dict) -> str:
     return (
         _panel_open("gap", "Mention vs. citation gap", "the headline finding")
         + f'<p class="mb-4 text-ink2">{lead}</p>'
-        + '<div class="mb-4 h-64"><canvas id="chart-gap"></canvas></div>'
+        + '<div id="chart-gap" class="geo-chart mb-5"><svg></svg></div>'
         + grid
         + _panel_close()
     )
@@ -293,7 +294,7 @@ def _recommendations(r: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Per-engine metrics with CI (Chart.js floating bands + point markers)
+# Per-engine metrics with CI (D3 dot-plot with lo→hi error whiskers)
 # --------------------------------------------------------------------------- #
 def _metrics(r: dict) -> str:
     per = r.get("per_engine_metrics") or {}
@@ -306,7 +307,7 @@ def _metrics(r: dict) -> str:
     charts = "".join(
         f'<div class="rounded-xl border border-line p-4">'
         f'<h3 class="mb-2 text-sm font-semibold text-ink">{title}</h3>'
-        f'<div class="h-56"><canvas id="{cid}"></canvas></div></div>'
+        f'<div id="{cid}" class="geo-chart"><svg></svg></div></div>'
         for title, cid in (
             ("Mention rate", "chart-ci-mention"),
             ("Citation rate", "chart-ci-citation"),
@@ -316,7 +317,7 @@ def _metrics(r: dict) -> str:
     return (
         _panel_open("metrics", "Per-engine metrics", "point ● with 95% confidence interval")
         + '<p class="mb-4 text-ink2">Every rate carries its 95% interval — the bright dot is the '
-        "point estimate, the band is [lo, hi]. Wide bands = high uncertainty (small n / "
+        "point estimate, the whisker is [lo, hi]. Wide whiskers = high uncertainty (small n / "
         "near-degenerate). No single-run point score is shown without an interval.</p>"
         + f'<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">{charts}</div>'
         + _panel_close()
@@ -371,59 +372,19 @@ def _distinguishability(r: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Cross-engine reconciliation: numbers + a CSS-grid Jaccard heatmap
+# Cross-engine reconciliation: numbers + a D3 Jaccard heatmap
 # --------------------------------------------------------------------------- #
 def _heatmap(overlap: dict, engines: list[str]) -> str:
+    """Mount for the D3 heatmap; the matrix is drawn client-side from the JSON blob.
+
+    Returns nothing for a single engine (no pairs to draw); the D3 code no-ops in the
+    same case, so the container is safe to omit here.
+    """
     if len(engines) < 2:
         return ""
-    pairwise = overlap.get("pairwise_jaccard") or {}
-    lookup: dict[frozenset, float] = {}
-    for key, val in pairwise.items():
-        parts = str(key).split("|")
-        if len(parts) == 2:
-            lookup[frozenset(parts)] = float(val)
-
-    header = '<div></div>' + "".join(
-        f'<div class="px-1 py-1 text-center text-[11px] font-semibold text-ink2 truncate">'
-        f"{_e(e)}</div>"
-        for e in engines
-    )
-    rows: list[str] = [header]
-    for a in engines:
-        cells = [
-            f'<div class="px-1 py-1 text-right text-[11px] font-semibold text-ink2 truncate">'
-            f"{_e(a)}</div>"
-        ]
-        for b in engines:
-            if a == b:
-                cells.append(
-                    '<div class="flex aspect-square items-center justify-center rounded-md '
-                    'border border-line bg-surface2 text-[11px] tabular-nums text-muted">'
-                    "1.00</div>"
-                )
-                continue
-            v = lookup.get(frozenset((a, b)))
-            if v is None:
-                cells.append(
-                    '<div class="flex aspect-square items-center justify-center rounded-md '
-                    'border border-line bg-surface2 text-[11px] text-muted">—</div>'
-                )
-                continue
-            alpha = 0.10 + 0.85 * max(0.0, min(1.0, v))
-            txt = "#0b0f17" if v >= 0.55 else "#e6edf7"
-            cells.append(
-                f'<div class="flex aspect-square items-center justify-center rounded-md '
-                f'border border-line text-[11px] font-semibold tabular-nums" '
-                f'style="background-color:rgba(34,211,238,{alpha:.3f});color:{txt}">'
-                f"{v:.2f}</div>"
-            )
-        rows.append("".join(cells))
-    n = len(engines)
-    grid_cols = f"minmax(56px,auto) repeat({n}, minmax(0,1fr))"
     return (
-        '<div class="mt-2 overflow-x-auto"><div class="grid gap-1" '
-        f'style="grid-template-columns:{grid_cols};max-width:640px">'
-        f'{"".join(rows)}</div>'
+        '<div class="mt-2 overflow-x-auto">'
+        '<div id="chart-heatmap" class="geo-chart" style="max-width:640px"><svg></svg></div>'
         '<p class="mt-2 text-xs text-muted">Pairwise cited-domain overlap (Jaccard). '
         "Brighter = more shared sources; diagonal is self.</p></div>"
     )
@@ -482,7 +443,7 @@ def _reconciliation(r: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Top cited domains per engine (Chart.js small multiples)
+# Top cited domains per engine (D3 small-multiple horizontal bars)
 # --------------------------------------------------------------------------- #
 def _top_domains(r: dict) -> str:
     top = r.get("top_domains") or {}
@@ -492,8 +453,7 @@ def _top_domains(r: dict) -> str:
     blocks = "".join(
         f'<div class="rounded-xl border border-line p-4">'
         f'<h3 class="mb-2 text-sm font-semibold text-ink">{_e(engine)}</h3>'
-        f'<div class="h-56"><canvas class="top-canvas" data-engine="{_e(engine)}"></canvas>'
-        f"</div></div>"
+        f'<div class="top-chart geo-chart" data-engine="{_e(engine)}"><svg></svg></div></div>'
         for engine in top
     )
     tnote = (
@@ -673,7 +633,7 @@ def _notes(r: dict) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Head: Tailwind + Chart.js CDNs, dark config
+# Head: Tailwind + D3 v7 CDNs, dark config
 # --------------------------------------------------------------------------- #
 _TAILWIND_CONFIG = """
 tailwind.config = {
@@ -722,136 +682,283 @@ def _topbar() -> str:
 
 
 # --------------------------------------------------------------------------- #
-# The Chart.js builder (one script, reads the injected JSON blob)
+# The D3 v7 builder (one script, reads the injected JSON blob into SVG charts)
 # --------------------------------------------------------------------------- #
-_CHART_JS = r"""
+_D3_JS = r"""
 (function () {
   var el = document.getElementById('geo-report');
-  if (!el || typeof Chart === 'undefined') return;
+  if (!el || typeof d3 === 'undefined') return;
   var R;
   try { R = JSON.parse(el.textContent); } catch (e) { return; }
+
+  var C = { bg: '#0b0f17', surface: '#0f1626', surface2: '#182236', line: '#1f2b40',
+            accent: '#22d3ee', accent2: '#f472b6', warn: '#fbbf24', crit: '#f87171',
+            ok: '#34d399', ink: '#e6edf7', ink2: '#94a3b8', muted: '#64748b' };
+  var GRID = 'rgba(148,163,184,0.12)';
+  var FONT = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
   var per = R.per_engine_metrics || {};
   var engines = Object.keys(per);
-  var C = { accent: '#22d3ee', accent2: '#f472b6', warn: '#fbbf24',
-            crit: '#f87171', ok: '#34d399' };
 
-  Chart.defaults.color = '#94a3b8';
-  Chart.defaults.borderColor = 'rgba(148,163,184,0.12)';
-  Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
-
-  function withAlpha(hex, a) {
-    var n = parseInt(hex.slice(1), 16);
-    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  // One shared, absolutely-positioned tooltip for every chart.
+  var tip = d3.select('body').append('div').attr('class', 'geo-tooltip');
+  tip.node().style.cssText =
+    'position:absolute;z-index:60;pointer-events:none;opacity:0;transition:opacity .12s;' +
+    'max-width:260px;padding:8px 10px;border-radius:10px;line-height:1.35;font:12px ' + FONT +
+    ';color:' + C.ink + ';background:rgba(15,22,38,0.97);border:1px solid ' + C.line +
+    ';box-shadow:0 8px 24px rgba(0,0,0,0.45);';
+  function showTip(html, ev) { tip.html(html).style('opacity', 1); moveTip(ev); }
+  function moveTip(ev) {
+    tip.style('left', (ev.pageX + 14) + 'px').style('top', (ev.pageY + 14) + 'px');
   }
+  function hideTip() { tip.style('opacity', 0); }
+  function hoverable(sel, htmlFn) {
+    sel.style('cursor', 'default')
+      .on('mousemove', function (ev, d) { showTip(htmlFn(d), ev); })
+      .on('mouseleave', hideTip);
+  }
+
   function pt(est) { return est && est.point != null ? est.point * 100 : 0; }
-  function lo(est) { return est && est.lo != null ? est.lo * 100 : 0; }
-  function hi(est) { return est && est.hi != null ? est.hi * 100 : 0; }
+  function loOf(est) { return est && est.lo != null ? est.lo * 100 : 0; }
+  function hiOf(est) { return est && est.hi != null ? est.hi * 100 : 0; }
   function nOf(est) { return est && est.n != null ? est.n : 0; }
+  function fpct(v) { return v.toFixed(0) + '%'; }
+  function widthOf(node) { return Math.max(260, node.clientWidth || 600); }
 
-  var pctAxis = {
-    min: 0, max: 100,
-    ticks: { callback: function (v) { return v + '%'; } },
-    grid: { color: 'rgba(148,163,184,0.10)' }
-  };
+  function freshSvg(node, width, height) {
+    // Reuse the server-rendered <svg> placeholder inside the mount (create one if absent),
+    // clear it, and (re)size it. Width is measured from the parent mount for responsiveness.
+    var svg = d3.select(node).select('svg');
+    if (svg.empty()) svg = d3.select(node).append('svg');
+    svg.selectAll('*').remove();
+    return svg
+      .attr('viewBox', '0 0 ' + width + ' ' + height)
+      .attr('width', '100%').attr('height', height)
+      .attr('preserveAspectRatio', 'xMinYMin meet')
+      .style('overflow', 'visible').style('display', 'block');
+  }
 
-  // 1) Mention vs citation gap — grouped horizontal bars.
-  (function () {
-    var cv = document.getElementById('chart-gap');
-    if (!cv || !engines.length) return;
-    var mention = engines.map(function (e) { return pt(per[e].mention); });
-    var citation = engines.map(function (e) { return pt(per[e].citation); });
-    new Chart(cv, {
-      type: 'bar',
-      data: {
-        labels: engines,
-        datasets: [
-          { label: 'Mention %', data: mention, backgroundColor: C.accent, borderRadius: 4,
-            borderSkipped: false },
-          { label: 'Citation %', borderRadius: 4, borderSkipped: false,
-            data: citation,
-            backgroundColor: citation.map(function (c, i) {
-              return (mention[i] >= 40 && c <= 5) ? C.crit : C.accent2; }) }
-        ]
-      },
-      options: {
-        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        scales: { x: pctAxis, y: { grid: { display: false } } },
-        plugins: {
-          legend: { position: 'bottom' },
-          tooltip: { callbacks: { label: function (c) {
-            return c.dataset.label + ': ' + c.parsed.x.toFixed(0) + '%'; } } }
+  function pctGrid(svg, x, top, bottom, ticks) {
+    var g = svg.append('g');
+    g.selectAll('line').data(ticks).join('line')
+      .attr('x1', function (d) { return x(d); }).attr('x2', function (d) { return x(d); })
+      .attr('y1', top).attr('y2', bottom).attr('stroke', GRID).attr('stroke-width', 1);
+    g.selectAll('text').data(ticks).join('text')
+      .attr('x', function (d) { return x(d); }).attr('y', bottom + 15)
+      .attr('text-anchor', 'middle').attr('fill', C.muted).attr('font-size', 10)
+      .text(function (d) { return d + '%'; });
+  }
+
+  // -- Redraw registry: every chart is a closure re-run on resize (responsive). --
+  var redraws = [];
+  function register(fn) { redraws.push(fn); try { fn(); } catch (e) {} }
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      redraws.forEach(function (f) { try { f(); } catch (e) {} });
+    }, 150);
+  });
+
+  // 1) Mention-vs-citation gap -> DUMBBELL / connected-dot chart.
+  function drawGap() {
+    var node = document.getElementById('chart-gap');
+    if (!node || !engines.length) return;
+    var W = widthOf(node);
+    var m = { top: 10, right: 46, bottom: 30, left: 96 };
+    var rowH = 36;
+    var H = m.top + m.bottom + engines.length * rowH;
+    var svg = freshSvg(node, W, H);
+    var x = d3.scaleLinear().domain([0, 100]).range([m.left, W - m.right]);
+    var y = d3.scaleBand().domain(engines).range([m.top, H - m.bottom]).padding(0.5);
+    pctGrid(svg, x, m.top, H - m.bottom, x.ticks(5));
+    engines.forEach(function (e) {
+      var cy = y(e) + y.bandwidth() / 2;
+      var mp = pt(per[e].mention), cp = pt(per[e].citation);
+      var flagged = mp >= 40 && cp <= 5;
+      var cCol = flagged ? C.crit : C.accent2;
+      svg.append('text').attr('x', m.left - 12).attr('y', cy).attr('dy', '0.32em')
+        .attr('text-anchor', 'end').attr('fill', C.ink2).attr('font-size', 12)
+        .attr('font-weight', 600).text(e);
+      svg.append('line').attr('x1', x(mp)).attr('x2', x(cp)).attr('y1', cy).attr('y2', cy)
+        .attr('stroke', flagged ? C.crit : C.line).attr('stroke-width', flagged ? 3 : 2);
+      svg.append('circle').attr('cx', x(mp)).attr('cy', cy).attr('r', 6)
+        .attr('fill', C.accent).attr('stroke', C.bg).attr('stroke-width', 1.5);
+      svg.append('circle').attr('cx', x(cp)).attr('cy', cy).attr('r', 6)
+        .attr('fill', cCol).attr('stroke', C.bg).attr('stroke-width', 1.5);
+      hoverable(
+        svg.append('rect').attr('x', m.left).attr('y', y(e))
+          .attr('width', W - m.right - m.left).attr('height', y.bandwidth())
+          .attr('fill', 'transparent'),
+        function () {
+          return '<b>' + e + '</b><br>mention: <b style="color:' + C.accent + '">' +
+            fpct(mp) + '</b><br>citation: <b style="color:' + cCol + '">' + fpct(cp) +
+            '</b>' + (flagged ? '<br><span style="color:' + C.crit +
+            '">mentioned, not cited</span>' : '');
         }
-      }
-    });
-  })();
-
-  // 2) Per-engine rate with a 95% CI — floating [lo,hi] band + a point marker.
-  function ciChart(id, key, color) {
-    var cv = document.getElementById(id);
-    if (!cv || !engines.length) return;
-    var bands = engines.map(function (e) { return [lo(per[e][key]), hi(per[e][key])]; });
-    var points = engines.map(function (e) { return { x: pt(per[e][key]), y: e }; });
-    new Chart(cv, {
-      type: 'bar',
-      data: {
-        labels: engines,
-        datasets: [
-          { label: '95% CI', data: bands, backgroundColor: withAlpha(color, 0.28),
-            borderColor: withAlpha(color, 0.55), borderWidth: 1, borderSkipped: false,
-            borderRadius: 3, barPercentage: 0.5, categoryPercentage: 0.7, order: 2 },
-          { type: 'scatter', label: 'point', data: points, parsing: false,
-            backgroundColor: color, borderColor: '#0b0f17', borderWidth: 1,
-            pointRadius: 5, pointHoverRadius: 7, order: 1 }
-        ]
-      },
-      options: {
-        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        scales: { x: pctAxis, y: { type: 'category', labels: engines, grid: { display: false } } },
-        plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: function (c) {
-            var e = engines[c.dataIndex] || c.raw.y; var est = per[e] && per[e][key];
-            if (c.dataset.type === 'scatter') {
-              return e + ': ' + pt(est).toFixed(0) + '% (point)';
-            }
-            return '95% CI ' + lo(est).toFixed(0) + '%–' + hi(est).toFixed(0) +
-              '% (n=' + nOf(est) + ')';
-          } } }
-        }
-      }
+      );
     });
   }
-  ciChart('chart-ci-mention', 'mention', C.accent);
-  ciChart('chart-ci-citation', 'citation', C.accent2);
-  ciChart('chart-ci-sov', 'share_of_voice', C.warn);
+  register(drawGap);
 
-  // 3) Per-engine most-cited domains — small-multiple horizontal bars.
+  // 2) Per-engine rate with 95% CI -> DOT-PLOT with lo->hi error whiskers + end caps.
+  function ciChart(id, key, color) {
+    var node = document.getElementById(id);
+    if (!node || !engines.length) return;
+    var W = widthOf(node);
+    var m = { top: 8, right: 22, bottom: 26, left: 84 };
+    var rowH = 30;
+    var H = m.top + m.bottom + engines.length * rowH;
+    var svg = freshSvg(node, W, H);
+    var x = d3.scaleLinear().domain([0, 100]).range([m.left, W - m.right]);
+    var y = d3.scaleBand().domain(engines).range([m.top, H - m.bottom]).padding(0.5);
+    pctGrid(svg, x, m.top, H - m.bottom, x.ticks(4));
+    engines.forEach(function (e) {
+      var est = per[e][key] || {};
+      var cy = y(e) + y.bandwidth() / 2;
+      var lo = loOf(est), hi = hiOf(est), p = pt(est);
+      svg.append('text').attr('x', m.left - 8).attr('y', cy).attr('dy', '0.32em')
+        .attr('text-anchor', 'end').attr('fill', C.ink2).attr('font-size', 11).text(e);
+      svg.append('line').attr('x1', x(lo)).attr('x2', x(hi)).attr('y1', cy).attr('y2', cy)
+        .attr('stroke', color).attr('stroke-width', 2).attr('opacity', 0.75);
+      [lo, hi].forEach(function (v) {
+        svg.append('line').attr('x1', x(v)).attr('x2', x(v))
+          .attr('y1', cy - 5).attr('y2', cy + 5)
+          .attr('stroke', color).attr('stroke-width', 2).attr('opacity', 0.75);
+      });
+      svg.append('circle').attr('cx', x(p)).attr('cy', cy).attr('r', 5)
+        .attr('fill', color).attr('stroke', C.bg).attr('stroke-width', 1.5);
+      hoverable(
+        svg.append('rect').attr('x', m.left).attr('y', y(e))
+          .attr('width', W - m.right - m.left).attr('height', y.bandwidth())
+          .attr('fill', 'transparent'),
+        function () {
+          return '<b>' + e + '</b><br>point: <b style="color:' + color + '">' + fpct(p) +
+            '</b><br>95% CI: [' + fpct(lo) + ', ' + fpct(hi) + ']<br>n = ' + nOf(est);
+        }
+      );
+    });
+  }
+  register(function () { ciChart('chart-ci-mention', 'mention', C.accent); });
+  register(function () { ciChart('chart-ci-citation', 'citation', C.accent2); });
+  register(function () { ciChart('chart-ci-sov', 'share_of_voice', C.warn); });
+
+  // 3) Top cited domains per engine -> small-multiple horizontal bars.
   var target = String(R.target_domain || '').toLowerCase().replace(/^\.+/, '');
   function isTarget(d) {
     d = String(d).toLowerCase().replace(/^\.+/, '');
     return !!target && (d === target || d.endsWith('.' + target));
   }
   var top = R.top_domains || {};
-  document.querySelectorAll('canvas.top-canvas').forEach(function (cv) {
-    var e = cv.getAttribute('data-engine');
-    var entries = (top[e] || []).slice(0, 8);
-    if (!entries.length) return;
-    var labels = entries.map(function (x) { return x[0]; });
-    var counts = entries.map(function (x) { return x[1]; });
-    var colors = labels.map(function (d) {
-      return isTarget(d) ? C.accent : withAlpha(C.accent2, 0.6); });
-    new Chart(cv, {
-      type: 'bar',
-      data: { labels: labels, datasets: [{ label: 'citations', data: counts,
-        backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
-      options: {
-        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        scales: { x: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.10)' } },
-                  y: { grid: { display: false } } },
-        plugins: { legend: { display: false } }
+  function drawTop() {
+    d3.selectAll('.top-chart').each(function () {
+      var node = this;
+      var e = node.getAttribute('data-engine');
+      var entries = (top[e] || []).slice()
+        .sort(function (a, b) { return b[1] - a[1]; }).slice(0, 8);
+      if (!entries.length) { d3.select(node).selectAll('*').remove(); return; }
+      var W = widthOf(node);
+      var m = { top: 6, right: 30, bottom: 6, left: 120 };
+      var rowH = 24;
+      var H = m.top + m.bottom + entries.length * rowH;
+      var svg = freshSvg(node, W, H);
+      var maxC = d3.max(entries, function (d) { return d[1]; }) || 1;
+      var x = d3.scaleLinear().domain([0, maxC]).range([m.left, W - m.right]);
+      var y = d3.scaleBand().domain(entries.map(function (d) { return d[0]; }))
+        .range([m.top, H - m.bottom]).padding(0.28);
+      entries.forEach(function (d) {
+        var isT = isTarget(d[0]);
+        hoverable(
+          svg.append('rect').attr('x', m.left).attr('y', y(d[0])).attr('height', y.bandwidth())
+            .attr('width', Math.max(0, x(d[1]) - m.left)).attr('rx', 4)
+            .attr('fill', isT ? C.accent : 'rgba(244,114,182,0.55)'),
+          function () {
+            return '<b>' + d[0] + '</b><br>' + d[1] + ' citation' + (d[1] === 1 ? '' : 's');
+          }
+        );
+        svg.append('text').attr('x', m.left - 8).attr('y', y(d[0]) + y.bandwidth() / 2)
+          .attr('dy', '0.32em').attr('text-anchor', 'end').attr('font-size', 11)
+          .attr('fill', isT ? C.accent : C.ink2).text(d[0]);
+        svg.append('text').attr('x', x(d[1]) + 6).attr('y', y(d[0]) + y.bandwidth() / 2)
+          .attr('dy', '0.32em').attr('fill', C.muted).attr('font-size', 11)
+          .attr('font-weight', 600).text(d[1]);
+      });
+    });
+  }
+  register(drawTop);
+
+  // 4) Cross-engine overlap -> D3 HEATMAP (sequential surface->accent + numbers + legend).
+  function drawHeatmap() {
+    var node = document.getElementById('chart-heatmap');
+    if (!node) return;
+    var recon = R.reconciliation || {};
+    var overlap = recon.overlap || {};
+    var pairwise = overlap.pairwise_jaccard || {};
+    var uniq = overlap.per_engine_unique_domains || {};
+    var labels = engines.length ? engines : Object.keys(uniq);
+    if (labels.length < 2) { d3.select(node).selectAll('*').remove(); return; }
+    var lookup = {};
+    Object.keys(pairwise).forEach(function (k) {
+      var parts = k.split('|');
+      if (parts.length === 2) {
+        var v = +pairwise[k];
+        lookup[parts[0] + '|' + parts[1]] = v;
+        lookup[parts[1] + '|' + parts[0]] = v;
       }
     });
-  });
+    var W = widthOf(node);
+    var m = { top: 66, right: 16, bottom: 40, left: 92 };
+    var n = labels.length;
+    var cell = Math.max(30, Math.min(74, (W - m.left - m.right) / n));
+    var gridW = cell * n;
+    var H = m.top + cell * n + m.bottom;
+    var svg = freshSvg(node, W, H);
+    var color = d3.scaleLinear().domain([0, 1]).range([C.surface2, C.accent]);
+    labels.forEach(function (e, j) {
+      var cx = m.left + j * cell + cell / 2;
+      svg.append('text').attr('x', cx).attr('y', m.top - 8)
+        .attr('transform', 'rotate(-40,' + cx + ',' + (m.top - 8) + ')')
+        .attr('text-anchor', 'start').attr('fill', C.ink2).attr('font-size', 11).text(e);
+    });
+    labels.forEach(function (rowE, i) {
+      svg.append('text').attr('x', m.left - 8).attr('y', m.top + i * cell + cell / 2)
+        .attr('dy', '0.32em').attr('text-anchor', 'end').attr('fill', C.ink2)
+        .attr('font-size', 11).text(rowE);
+      labels.forEach(function (colE, j) {
+        var v = (rowE === colE) ? 1 : lookup[rowE + '|' + colE];
+        var has = v != null && !isNaN(v);
+        var x0 = m.left + j * cell, y0 = m.top + i * cell;
+        hoverable(
+          svg.append('rect').attr('x', x0 + 1).attr('y', y0 + 1)
+            .attr('width', cell - 2).attr('height', cell - 2).attr('rx', 4)
+            .attr('fill', has ? color(Math.max(0, Math.min(1, v))) : C.surface)
+            .attr('stroke', C.line),
+          function () {
+            return '<b>' + rowE + ' &cap; ' + colE + '</b><br>Jaccard: ' +
+              (has ? v.toFixed(3) : 'n/a');
+          }
+        );
+        if (has) {
+          svg.append('text').attr('x', x0 + cell / 2).attr('y', y0 + cell / 2)
+            .attr('dy', '0.32em').attr('text-anchor', 'middle')
+            .attr('font-size', Math.min(12, cell / 3.2)).attr('font-weight', 600)
+            .attr('fill', v >= 0.55 ? C.bg : C.ink).text(v.toFixed(2));
+        }
+      });
+    });
+    var lgY = m.top + cell * n + 16, lgW = Math.min(180, gridW);
+    var defs = svg.append('defs');
+    var grad = defs.append('linearGradient').attr('id', 'geo-heat-grad');
+    [0, 0.5, 1].forEach(function (s) {
+      grad.append('stop').attr('offset', (s * 100) + '%').attr('stop-color', color(s));
+    });
+    svg.append('rect').attr('x', m.left).attr('y', lgY).attr('width', lgW).attr('height', 10)
+      .attr('rx', 3).attr('fill', 'url(#geo-heat-grad)').attr('stroke', C.line);
+    svg.append('text').attr('x', m.left).attr('y', lgY + 24)
+      .attr('fill', C.muted).attr('font-size', 10).text('0.0');
+    svg.append('text').attr('x', m.left + lgW).attr('y', lgY + 24).attr('text-anchor', 'end')
+      .attr('fill', C.muted).attr('font-size', 10).text('1.0 (identical sources)');
+  }
+  register(drawHeatmap);
 })();
 """
 
@@ -868,9 +975,9 @@ def _report_json_blob(report: dict) -> str:
 def render_dashboard(report: dict) -> str:
     """Render a complete DARK HTML dashboard from a GeoReport dict.
 
-    Tailwind + Chart.js are loaded from CDNs (internet-required — the user's choice).
+    Tailwind + D3 v7 are loaded from CDNs (internet-required — the user's choice).
     All server-rendered text is HTML-escaped; the report is also injected as a JSON blob
-    that the client-side script reads to build every Chart.js chart.
+    that the client-side script reads to build every D3 SVG chart.
     """
     brand = _e(report.get("brand", "GEO report"))
     body = "".join(
@@ -899,7 +1006,7 @@ def render_dashboard(report: dict) -> str:
 <title>GEO report — {brand}</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>{_TAILWIND_CONFIG}</script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
 <body class="min-h-screen bg-bg font-sans text-ink antialiased">
 {_topbar()}
@@ -907,11 +1014,11 @@ def render_dashboard(report: dict) -> str:
 {body}
 <footer class="border-t border-line pt-6 text-xs text-muted">
 Measurement-honest GEO platform · every rate carries a 95% confidence interval ·
-charts by Chart.js, styling by Tailwind (CDN).
+charts by D3.js v7, styling by Tailwind (CDN).
 </footer>
 </main>
 <script type="application/json" id="geo-report">{data_blob}</script>
-<script>{_CHART_JS}</script>
+<script>{_D3_JS}</script>
 </body>
 </html>
 """

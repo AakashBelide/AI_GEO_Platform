@@ -32,7 +32,7 @@ Key flags: `--engines` (default all four), `--prompts` (30), `--repeats` (5), `-
 ```bash
 # Render a saved JSON report into a modern dark HTML dashboard (Task A2, pocs/dashboard)
 uv run python app/geo.py report --input data/reports/asana_2026-08-14.json
-# -> writes data/reports/asana_2026-08-14.html; open in a browser (Tailwind + Chart.js
+# -> writes data/reports/asana_2026-08-14.html; open in a browser (Tailwind + D3
 #    load from CDN, so viewing needs internet)
 ```
 The dashboard shows every rate with its 95% CI, flags the mention-vs-citation gap, gives

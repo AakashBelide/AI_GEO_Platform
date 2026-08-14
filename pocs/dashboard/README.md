@@ -2,15 +2,15 @@
 
 Every commercial GEO tool ships a glossy dashboard built on a **single-run visibility score**.
 This POC renders the honest version: it turns a saved `GeoReport` JSON (from `app/geo.py run`)
-into a **modern dark analytics dashboard** — Tailwind CSS + Chart.js (interactive charts) — where
-every number carries its uncertainty.
+into a **modern dark analytics dashboard** — Tailwind CSS + D3.js v7 (interactive SVG charts) —
+where every number carries its uncertainty.
 
 | Output | Fn | What |
 |---|---|---|
-| Dark HTML dashboard | `render_dashboard(report: dict) -> str` | complete HTML string: server-rendered dark UI (Tailwind) + a `<script id="geo-report">` JSON blob that the client uses to build every Chart.js chart |
+| Dark HTML dashboard | `render_dashboard(report: dict) -> str` | complete HTML string: server-rendered dark UI (Tailwind) + a `<script id="geo-report">` JSON blob that a D3 script reads to build every SVG chart |
 
 Pure function (`dict → str`), so the whole thing is testable offline with a synthetic fixture —
-no keys, no I/O. (The **rendered page** loads Tailwind + Chart.js from CDNs, so viewing it needs
+no keys, no I/O. (The **rendered page** loads Tailwind + D3 from CDNs, so viewing it needs
 internet; the server-rendered content — findings, recommendations, tables, heatmap, transcript —
 still shows without JS.)
 
@@ -19,22 +19,23 @@ still shows without JS.)
 - **Hero + stat tiles** — brand, category, mode badge, and big-number cards (engines, prompts ×
   repeats, total citations, mean cross-engine overlap, spend, generated date). A **loud amber
   banner when the mode is `dry-run (synthetic)`** flags the data as NOT a real measurement.
-- **Mention-vs-citation gap (the headline)** — a Chart.js grouped horizontal bar (mention % vs
-  citation % per engine); the citation bar turns **red** when an engine mentions the brand a lot
-  but cites its own domain ~0% (on the real Asana data OpenAI & Anthropic mention ~80% / cite
-  `asana.com` 0%), plus red flag cards.
+- **Mention-vs-citation gap (the headline)** — a D3 **dumbbell** chart: per engine, the mention
+  dot ●───● the citation dot on a 0–100% axis, so the gap reads as a *distance*; the citation dot +
+  connector turn **red** when an engine mentions the brand a lot but cites its own domain ~0% (on
+  the real Asana data OpenAI & Anthropic mention ~80% / cite `asana.com` 0%), plus red flag cards.
 - **Findings & Recommendations** — the `pocs/insights` interpretation layer, high up: plain-English
   findings (restated numbers) and hedged, evidence-tied GEO recommendations (each names a concrete
   engine/domain/count).
-- **Per-engine rates with 95% CI** — three Chart.js charts (mention / citation / SoV) drawing the
-  point estimate **plus a floating `[lo, hi]` confidence band**, so a wide/degenerate interval is
-  visually obvious rather than hidden behind a single percentage.
+- **Per-engine rates with 95% CI** — three D3 **dot-plots with error whiskers** (mention / citation
+  / SoV): the point estimate ● with a `lo→hi` whisker and end caps, drawn unclamped so a
+  wide/degenerate interval is visually obvious rather than hidden behind a single percentage.
 - **Statistical distinguishability** — every engine pair through `pocs/rigor.two_proportion_test`;
   prints `A vs B: distinguishable / NOT distinguishable (within noise)` so the dashboard never
   implies a difference inside the noise.
-- **Cross-engine reconciliation** — a colored **CSS-grid Jaccard heatmap** of pairwise citation
+- **Cross-engine reconciliation** — a **D3 Jaccard heatmap** (sequential color scale + per-cell
+  values + gradient legend) of pairwise citation
   overlap, unique cited domains per engine, and source-ecosystem divergence.
-- **Top cited domains per engine** — Chart.js small-multiple horizontal bars, target domain in
+- **Top cited domains per engine** — D3 small-multiple horizontal bars, target domain in
   the accent color.
 - **Prompt set / Prompts used** — the intent split + the exact questions, labelled by intent.
 - **Methodology card** — fields + caveats rendered **verbatim** (incl. the Gemini grounding-redirect
@@ -51,14 +52,15 @@ still shows without JS.)
 - **Safe injection** — the report JSON is escaped (`</` → `<\/`) so it can't break out of its
   `<script>`; all server-rendered text is HTML-escaped.
 
-> **Trade-off (by design choice):** the rendered page depends on the Tailwind + Chart.js CDNs, so
+> **Trade-off (by design choice):** the rendered page depends on the Tailwind + D3 CDNs, so
 > it is **not** a fully offline single file — it needs internet to render the styling/charts. This
 > was chosen for richer visuals; the `render_dashboard` function itself stays pure and offline.
 
 ## Design for testing
 Pure `dict → str`. `test_dashboard.py` builds a synthetic report mirroring the real Asana finding
-and asserts the structure renders (brand, the CDN script tags, the `id="geo-report"` data blob,
-`<canvas>` charts, the gap flag, a distinguishability verdict, findings/recommendations, a
+and asserts the structure renders (brand, the D3 CDN script tag — and that Chart.js/`<canvas>` are
+absent — the `id="geo-report"` data blob, the `<svg>` chart mounts, the gap flag, a
+distinguishability verdict, findings/recommendations, a
 `<details>` transcript with a citation URL, the heatmap cells, the synthetic banner logic) plus
 edge cases (empty reconciliation, single engine, HTML-escaping).
 

@@ -17,10 +17,22 @@ reconciliation.**
 - **`TASKS.md`** — the concrete build plan and task graph.
 
 ## Status
-🟢 Core loop working: **100 tests passing, ruff-clean.** POCs built for F2/F3 (fact store +
-4-engine connectors under a $2/provider budget guard), O1 (statistical rigor), C1 (safe
-crawler), R1 (onboarding), R2 (metrics with confidence intervals). Live-verified on all four
-engines (≈$0.065 spent of $8.00). Next: R3, then app integration. See `pocs/` and `TASKS.md`.
+🟢 End-to-end pipeline working: **145 tests passing, ruff-clean.** POCs built for F2/F3 (fact
+store + 4-engine connectors under a $2/provider budget guard), O1 (statistical rigor), C1 (safe
+crawler), R1/R3 (onboarding + keyword→prompt), R2 (metrics with confidence intervals), O3
+(cross-engine reconciliation). All wired behind one CLI (`app/geo.py`, Task A1). Live-verified on
+all four engines; measured cross-engine citation overlap ≈10.6% (≈$0.30 spent of $8.00). Next: O2
+(causal). See `pocs/`, `app/`, and `TASKS.md`.
+
+## Quick start
+```bash
+uv sync
+uv run pytest                              # 145 tests, offline
+# End-to-end dry-run (synthetic, $0):
+uv run python app/geo.py run --brand "Asana" --category "project management software" \
+    --target-domain asana.com --competitor-domains monday.com,trello.com,clickup.com
+# add --live to call real engines under the $2/provider budget guard
+```
 
 ## Requirements (already on the dev machine — no new global installs)
 - Python 3.13 + [uv](https://docs.astral.sh/uv/)

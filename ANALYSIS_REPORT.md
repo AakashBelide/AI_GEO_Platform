@@ -3,7 +3,7 @@
 A running, referenceable log of what was built, the decisions made, the models/costs used,
 and what was learned. Append new dated entries at the top of §5 as work continues.
 
-_Last updated: 2026-08-13._
+_Last updated: 2026-08-14._
 
 ---
 
@@ -25,8 +25,9 @@ plan in `TASKS.md`.
 | Core metric set with CIs (mention/citation/SoV/position/sentiment) | R2 | `pocs/metrics/` | 20 | No |
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 | Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
+| End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 16 | No (offline); `--live` optional |
 
-**Total: 129 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 145 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -47,6 +48,19 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-14 — A1: end-to-end `geo run` CLI built (offline dry-run default)
+- **`app/` (16 tests).** Wires the passing POCs into one command: brand → prompts (R1) → runs
+  (synthetic dry-run / live connectors) → fact store (F2, live) → metrics with CIs (R2/O1) →
+  cross-engine reconciliation + methodology card (O3). Reuses POC modules unchanged via
+  `app/_paths.py`; orchestration in `pipeline.py`, CLI in `geo.py`.
+- **Dry-run is the default and spends $0** (deterministic synthetic data, clearly labeled "NOT a
+  measurement"); `--live` is required to call real engines, still under the $2/provider guard.
+  Outputs human tables **and** a machine-readable JSON report under `data/reports/` (gitignored);
+  live runs persist to `data/geo.sqlite`.
+- Verified end-to-end on a dry-run (Asana / 4 engines / 30 prompts × 8): CIs on every metric,
+  realistic synthetic overlap (~0.43), divergence explainer fires. Suite now **145 tests**.
+  Milestone 4 (A1) done; remaining open lane is O2 (causal).
 
 ### 2026-08-13 — O3 follow-up: Gemini redirect artifact FIXED (offline, $0)
 - Root cause confirmed: Gemini grounding chunks carry the real publisher domain in **`web.title`**

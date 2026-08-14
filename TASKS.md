@@ -239,7 +239,12 @@ X1 testing / X2 lint / X3 docs run throughout.
 
 ## MILESTONE 4 — App integration (A)
 
-### A1 ☐ Integrate validated POCs into `app/`
+### A1 ☑ Integrate validated POCs into `app/`
+> **Done:** `app/` — 16 tests. `geo run` CLI wires R1→(synthetic/live F3)→F2→R2/O1→O3 into one
+> command. Offline dry-run by default ($0, deterministic, labeled synthetic); `--live` calls real
+> engines under the $2 guard and persists to `data/geo.sqlite`. Emits human tables + a JSON report
+> under `data/reports/`. Reuses POC modules unchanged via `app/_paths.py`. A scheduler for repeated
+> runs is deferred (not needed for the single-shot CLI yet).
 - **Depends on:** the relevant POCs passing (F3, R1–R3, O1–O3, C1).
 - **Subtasks:** package modules under `app/` (connectors, metrics, rigor, reconcile, crawler);
   a scheduler for repeated runs; one CLI entrypoint (`geo run --brand ... --engines ...`).

@@ -16,7 +16,7 @@ claims, and clearly-labeled **opinions**. This is the analytical companion to th
 > facts — they are marked **[judgment]** or **[from external research, not our measurement]**.
 > This is the whole point of the project, so the documentation holds itself to the same bar.
 
-_Last updated: 2026-08-13._
+_Last updated: 2026-08-14._
 
 ---
 
@@ -57,7 +57,11 @@ Source: `uv run pytest pocs/<mod> -o addopts=""` per module (§Reproduction R-1)
 | `pocs/metrics` | R2 metrics+CI | 20 | no | ~0.48s |
 | `pocs/keyword_to_prompt` | R3 keyword→prompt | 14 | no | ~0.02s |
 | `pocs/reconcile` | O3 cross-engine reconcile | 13 | no | ~0.7s |
-| **Total** | | **127** | | ~2s |
+| `app` | A1 pipeline + `geo run` CLI | 16 | no | ~5s |
+| **Total** | | **145** | | ~7s |
+
+(Per-module counts drift as tests are added — `pocs/connectors` is 25 after the O-7 Gemini
+parser tests; the total is authoritative.)
 
 100 % of the suite runs **offline** — external APIs are mocked/replayed and the crawler uses
 saved fixtures — so tests never spend budget or touch the network.

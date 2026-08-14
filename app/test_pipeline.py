@@ -175,7 +175,8 @@ def test_cmd_report_writes_self_contained_html(tmp_path):
     assert out_path.exists()
     html = out_path.read_text()
     assert html.lstrip().startswith("<!DOCTYPE html>")
-    assert "<svg" in html
+    assert 'id="geo-report"' in html  # injected report blob for the Chart.js charts
+    assert "<canvas" in html
     assert "Acme Board" in html
 
 
@@ -232,5 +233,5 @@ def test_cmd_report_with_store_enriches_evidence(tmp_path):
     html = out_path.read_text()
     assert "best pm software?" in html            # prompt reconstructed
     assert "techradar.com" in html                # top cited domain
-    assert "<details>" in html                    # transcript block
+    assert "<details" in html                     # transcript block (dark-styled details)
     assert "Findings" in html and "Recommendations" in html

@@ -26,10 +26,10 @@ plan in `TASKS.md`.
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 | Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
 | End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 20 | No (offline); `--live` optional |
-| Local HTML dashboard (CI bars, gap callout, distinguishability) | A2 | `pocs/dashboard/` | 21 | No |
+| Dark dashboard (Tailwind+Chart.js: gap chart, CI bands, heatmap, transcript) | A2 | `pocs/dashboard/` | 24 | No |
 | Interpretation layer: findings + GEO recommendations (evidence-tied) | A2 | `pocs/insights/` | 20 | No |
 
-**Total: 199 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 202 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -50,6 +50,20 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-14 — A2 redesign: modern dark dashboard (Tailwind + Chart.js)
+- Rewrote `pocs/dashboard/dashboard.py` into a **dark analytics dashboard**: sticky nav, hero +
+  stat tiles, and interactive **Chart.js** charts — the mention-vs-citation gap (grouped bars),
+  per-engine rates as point + floating **95% CI band**, and per-engine top-domain small-multiples;
+  the cross-engine overlap is a CSS-grid **Jaccard heatmap**. Styling via **Tailwind** (both from
+  CDN). Findings/recommendations promoted near the top; evidence transcript kept as `<details>`.
+- **Trade-off (per the user's explicit choice):** the rendered page now depends on the Tailwind +
+  Chart.js CDNs, so it is **no longer a fully offline single file** — viewing needs internet. The
+  `render_dashboard` function stays pure/offline-tested; the report JSON is injected as an escaped
+  (`</`→`<\/`) `<script id="geo-report">` blob and all server text is HTML-escaped. Every honesty
+  element preserved (CIs visible, synthetic banner, distinguishability verdicts, verbatim caveats).
+- 24 dashboard tests (rewritten); regenerated `data/reports/asana_2026-08-14.html` (~232 KB, 8
+  canvases). Suite now **202 tests**, ruff clean.
 
 ### 2026-08-14 — A2 extended: evidence drill-down + findings/recommendations
 - **`pocs/insights/` (20 tests) + `app/store_reader.py` (6 tests).** The dashboard now carries the

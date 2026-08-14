@@ -1,30 +1,31 @@
-"""Local reporting dashboard (Task A2): a GeoReport → one self-contained HTML file.
+"""Local reporting dashboard (Task A2): a GeoReport → one modern DARK HTML dashboard.
 
 Turns the machine-readable report emitted by `app/geo.py run` (the `GeoReport`
-dataclass in `app/pipeline.py`) into an honesty-first HTML dashboard that opens
-directly in a browser with **no server, no network, no external assets**. All charts
-are hand-written inline SVG; all styling is inline CSS. Pure functions
-(`report dict → HTML string`), so the whole thing is offline-testable.
+dataclass in `app/pipeline.py`) into an honesty-first, product-analytics dark dashboard.
+Charts are drawn with **Chart.js** (loaded from a CDN) and the page is styled with
+**Tailwind** (also CDN); the cross-engine overlap heatmap is a reliable server-rendered
+CSS grid (no plugin). The user chose CDN delivery, so the page is internet-required.
 
 Honesty-first choices, mirrored from the rest of the platform:
-  * every rate is drawn as a point estimate **with its confidence interval** — never a
-    bare score (the project's whole thesis; see RESEARCH.md / `pocs/rigor`).
+  * every rate is drawn as a point estimate **with its 95% confidence interval** — never a
+    bare score (the project's whole thesis; see RESEARCH.md / `pocs/rigor`). The CI charts
+    use a floating [lo, hi] band + a point marker so wide/degenerate intervals look wide.
   * a synthetic dry-run is loudly flagged as NOT a real measurement.
-  * the "mentioned a lot, cited ~never" gap is made visually obvious (the headline
-    finding on the real Asana data: OpenAI & Anthropic mention ~80% but cite the
-    brand's own domain 0%).
+  * the "mentioned a lot, cited ~never" gap is the headline (a grouped bar chart + red
+    "mentioned, not cited" flag cards).
   * cross-engine pairs are checked for statistical distinguishability with the rigor
-    POC's `two_proportion_test` — the dashboard refuses to imply a difference that is
-    within noise.
-  * the methodology card (incl. the Gemini-redirect caveat) is rendered verbatim.
+    POC's `two_proportion_test` — the dashboard refuses to imply a difference within noise.
+  * findings / hedged recommendations and the methodology card (incl. the Gemini-redirect
+    caveat) are rendered verbatim; the evidence transcript keeps real answers + citation URLs.
 
-Reuses `pocs/rigor` via the same sibling-dir sys.path shim `pocs/metrics/metrics.py`
-uses — the stats live in one place only.
+Reuses `pocs/rigor` via the same sibling-dir sys.path shim `pocs/metrics/metrics.py` uses —
+the stats live in one place only.
 """
 
 from __future__ import annotations
 
 import html
+import json
 import sys
 from pathlib import Path
 
@@ -37,21 +38,13 @@ if str(_RIGOR) not in sys.path:
 from rigor import two_proportion_test  # noqa: E402
 
 # --------------------------------------------------------------------------- #
-# Palette (validated data-viz default; light, muted, professional)
+# Dark palette (neon accents on near-black; the exact tokens the Tailwind config uses)
 # --------------------------------------------------------------------------- #
-INK = "#0b0b0b"       # primary text
-INK2 = "#52514e"      # secondary text
-MUTED = "#898781"     # axis / captions
-GRID = "#e1e0d9"      # hairline gridlines
-AXIS = "#c3c2b7"      # baseline
-SURFACE = "#fcfcfb"   # card surface
-PLANE = "#f9f9f7"     # page plane
-SERIES = "#2a78d6"    # point-estimate mark (categorical slot 1)
-BAND = "#cde2fb"      # CI band fill (blue, step 100)
-GOOD = "#0ca30c"      # status: good
-WARN = "#fab219"      # status: warning
-CRIT = "#d03b3b"      # status: critical
-BORDER = "rgba(11,11,11,0.10)"
+ACCENT = "#22d3ee"    # cyan — primary
+ACCENT2 = "#f472b6"   # magenta/pink — secondary
+WARN = "#fbbf24"      # amber — warning
+CRIT = "#f87171"      # red — critical
+OK = "#34d399"        # green — ok
 
 # When mention is at/above this and citation at/below that, flag the headline gap.
 _GAP_MENTION_MIN = 0.40
@@ -80,288 +73,260 @@ def _est_k_n(est: dict) -> tuple[int, int]:
     return round(float(est.get("point", 0.0)) * n), n
 
 
-# --------------------------------------------------------------------------- #
-# The core visual: a horizontal CI bar on a 0..1 proportion scale (inline SVG)
-# --------------------------------------------------------------------------- #
-def ci_bar_svg(
-    point: float,
-    lo: float,
-    hi: float,
-    *,
-    n: int | None = None,
-    label: str | None = None,
-    width: int = 240,
-    height: int = 24,
-    color: str = SERIES,
-    band: str = BAND,
-) -> str:
-    """A hand-written inline-SVG bar for a 0..1 proportion with a CI whisker/band.
-
-    Draws (left→right on a fixed 0–100% track): faint quarter gridlines, a shaded
-    band spanning [lo, hi], a whisker with end caps, a point-estimate dot, and the
-    point value as text. Reused for mention rate, citation rate and share-of-voice.
-    Values are clamped to [0, 1] so a malformed estimate can never overflow the track.
-    """
-    def clamp(v: float) -> float:
-        return 0.0 if v < 0 else 1.0 if v > 1 else v
-
-    p, lo_c, hi_c = clamp(point), clamp(lo), clamp(hi)
-    if hi_c < lo_c:
-        lo_c, hi_c = hi_c, lo_c
-
-    x0, x1 = 6.0, float(width - 60)   # leave room for the value label on the right
-    mid = height / 2.0
-
-    def x(v: float) -> float:
-        return x0 + v * (x1 - x0)
-
-    aria = _e(label or "estimate")
-    parts: list[str] = [
-        f'<svg class="cibar" width="{width}" height="{height}" '
-        f'viewBox="0 0 {width} {height}" role="img" '
-        f'aria-label="{aria} {p * 100:.0f} percent, '
-        f'95% interval {lo_c * 100:.0f} to {hi_c * 100:.0f} percent">'
-    ]
-    tip = f"{label + ': ' if label else ''}{_pct(p)} (95% CI {_pct(lo_c)}–{_pct(hi_c)}"
-    tip += f", n={n})" if n is not None else ")"
-    parts.append(f"<title>{_e(tip)}</title>")
-
-    # quarter gridlines + baseline
-    for frac in (0.25, 0.5, 0.75):
-        gx = x(frac)
-        parts.append(
-            f'<line x1="{gx:.1f}" y1="3" x2="{gx:.1f}" y2="{height - 3}" '
-            f'stroke="{GRID}" stroke-width="1"/>'
-        )
-    parts.append(
-        f'<line x1="{x0:.1f}" y1="{mid:.1f}" x2="{x1:.1f}" y2="{mid:.1f}" '
-        f'stroke="{AXIS}" stroke-width="1"/>'
-    )
-
-    # CI band
-    bx, bw = x(lo_c), max(1.0, x(hi_c) - x(lo_c))
-    parts.append(
-        f'<rect x="{bx:.1f}" y="{mid - 5:.1f}" width="{bw:.1f}" height="10" rx="2" '
-        f'fill="{band}"/>'
-    )
-    # whisker caps
-    for cx in (x(lo_c), x(hi_c)):
-        parts.append(
-            f'<line x1="{cx:.1f}" y1="{mid - 5:.1f}" x2="{cx:.1f}" y2="{mid + 5:.1f}" '
-            f'stroke="{color}" stroke-width="1.5"/>'
-        )
-    # point-estimate dot
-    parts.append(
-        f'<circle cx="{x(p):.1f}" cy="{mid:.1f}" r="3.5" fill="{color}" '
-        f'stroke="{SURFACE}" stroke-width="1"/>'
-    )
-    # value label
-    parts.append(
-        f'<text x="{x1 + 6:.1f}" y="{mid + 4:.1f}" font-size="11" '
-        f'fill="{INK}" font-weight="600">{_pct(p)}</text>'
-    )
-    parts.append("</svg>")
-    return "".join(parts)
+def _f(est: dict, key: str, default: float = 0.0) -> float:
+    return float(est.get(key, default) or default)
 
 
 # --------------------------------------------------------------------------- #
-# Sections
+# Reusable dark building blocks
 # --------------------------------------------------------------------------- #
-def _header(r: dict) -> str:
+_CARD = "rounded-2xl border border-line bg-surface shadow-lg shadow-black/30"
+_SECTION = "scroll-mt-24"
+
+
+def _panel_open(anchor: str, title: str, hint: str = "") -> str:
+    hint_html = f'<span class="text-sm font-normal text-muted">{_e(hint)}</span>' if hint else ""
+    return (
+        f'<section id="{_e(anchor)}" class="{_SECTION}">'
+        f'<div class="{_CARD} p-6 sm:p-7">'
+        f'<h2 class="mb-4 flex items-center gap-3 text-lg font-semibold text-ink">'
+        f"{_e(title)} {hint_html}</h2>"
+    )
+
+
+def _panel_close() -> str:
+    return "</div></section>"
+
+
+def _badge(text: str, tone: str) -> str:
+    tones = {
+        "ok": "bg-ok/15 text-ok ring-1 ring-ok/30",
+        "warn": "bg-warn/15 text-warn ring-1 ring-warn/30",
+        "crit": "bg-crit/15 text-crit ring-1 ring-crit/30",
+        "accent": "bg-accent/15 text-accent ring-1 ring-accent/30",
+    }
+    cls = tones.get(tone, tones["accent"])
+    return (
+        f'<span class="inline-flex items-center rounded-full px-2.5 py-0.5 '
+        f'text-xs font-semibold {cls}">{_e(text)}</span>'
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Hero + stat tiles
+# --------------------------------------------------------------------------- #
+def _is_synthetic(mode: str) -> bool:
+    m = mode.lower()
+    return "synthetic" in m or "dry-run" in m
+
+
+def _prompts_x_repeats(r: dict) -> str:
+    card = ((r.get("reconciliation") or {}).get("methodology")) or {}
+    if card.get("n_prompts") and card.get("repeats_per_prompt"):
+        return f"{card.get('n_prompts')} × {card.get('repeats_per_prompt')}"
+    count = (r.get("prompt_set") or {}).get("count")
+    per = r.get("per_engine_metrics") or {}
+    repeats = None
+    for m in per.values():
+        n_runs, n = int(m.get("n_runs", 0) or 0), int((m.get("mention") or {}).get("n", 0) or 0)
+        if count and n:
+            repeats = round(n / count) if count else None
+        elif n_runs and count:
+            repeats = round(n_runs / count)
+        break
+    if count and repeats:
+        return f"{count} × {repeats}"
+    return _e(count) if count is not None else "—"
+
+
+def _total_citations(r: dict) -> int:
+    total = 0
+    for entries in (r.get("top_domains") or {}).values():
+        for entry in entries or []:
+            try:
+                total += int(entry[1])
+            except (IndexError, TypeError, ValueError):
+                continue
+    return total
+
+
+def _stat_tile(value: str, label: str, tone: str = "accent") -> str:
+    tone_cls = {"accent": "text-accent", "warn": "text-warn", "ink": "text-ink"}.get(
+        tone, "text-accent"
+    )
+    return (
+        f'<div class="{_CARD} p-4">'
+        f'<div class="text-2xl font-bold tabular-nums {tone_cls}">{_e(value)}</div>'
+        f'<div class="mt-1 text-xs uppercase tracking-wide text-muted">{_e(label)}</div>'
+        f"</div>"
+    )
+
+
+def _hero(r: dict) -> str:
     brand = _e(r.get("brand", "—"))
     category = _e(r.get("category", "—"))
     mode = str(r.get("mode", "—"))
-    generated = _e(r.get("generated_utc", "—"))
+    generated = str(r.get("generated_utc", "—"))
+    synthetic = _is_synthetic(mode)
     total_spend = sum(float(v.get("spent", 0.0)) for v in (r.get("spend") or {}).values())
+    n_engines = len(r.get("per_engine_metrics") or {})
+    mean_j = ((r.get("reconciliation") or {}).get("overlap") or {}).get("mean_pairwise_jaccard")
 
-    synthetic = "synthetic" in mode.lower() or "dry-run" in mode.lower()
+    mode_badge = _badge(mode, "warn" if synthetic else "ok")
     banner = ""
     if synthetic:
         banner = (
-            f'<div class="banner banner-warn">SYNTHETIC DRY-RUN — this is '
-            f'<strong>not a real measurement</strong> of {brand}. Deterministic '
-            f"fabricated data for wiring/demo only.</div>"
+            '<div class="mt-5 rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 '
+            'text-sm text-warn">'
+            "<span class=\"font-bold\">SYNTHETIC DRY-RUN — not a real measurement</span> "
+            f"of {brand}. Deterministic fabricated data for wiring/demo only.</div>"
         )
-    mode_badge = (
-        f'<span class="badge badge-warn">{_e(mode)}</span>'
-        if synthetic
-        else f'<span class="badge badge-ok">{_e(mode)}</span>'
+
+    tiles = "".join(
+        [
+            _stat_tile(str(n_engines), "engines tested"),
+            _stat_tile(_prompts_x_repeats(r), "prompts × repeats"),
+            _stat_tile(str(_total_citations(r)), "total citations"),
+            _stat_tile(_num(mean_j, 3), "mean cross-engine overlap"),
+            _stat_tile(f"${total_spend:.2f}", "total spend", tone="warn"),
+            _stat_tile(_e(generated)[:10], "generated", tone="ink"),
+        ]
     )
     return f"""
-    <header>
-      <div class="eyebrow">Measurement-honest GEO report</div>
-      <h1>{brand}</h1>
-      <div class="sub">{category}</div>
-      <div class="meta">
-        {mode_badge}
-        <span>generated {generated}</span>
-        <span>total spend ${total_spend:.2f}</span>
+    <section id="overview" class="{_SECTION} pt-2">
+      <div class="text-xs font-semibold uppercase tracking-[0.18em] text-accent">
+        Measurement-honest GEO report</div>
+      <h1 class="mt-2 text-4xl font-extrabold tracking-tight text-ink sm:text-5xl">{brand}</h1>
+      <div class="mt-2 flex flex-wrap items-center gap-3 text-lg text-ink2">
+        <span>{category}</span>{mode_badge}
       </div>
       {banner}
-    </header>
-    """
-
-
-def _prompt_set(r: dict) -> str:
-    ps = r.get("prompt_set") or {}
-    count = ps.get("count", "—")
-    intents = ps.get("intents") or {}
-    skew = ps.get("skew") or {}
-    skew_ok = bool(skew.get("ok", False))
-    skew_msg = _e(skew.get("message", "—"))
-
-    chips = "".join(
-        f'<span class="chip"><b>{_e(k)}</b> {int(v.get("count", 0))} '
-        f'({v.get("fraction", 0.0) * 100:.0f}%)</span>'
-        for k, v in intents.items()
-    )
-    skew_cls = "verdict-ok" if skew_ok else "verdict-bad"
-    return f"""
-    <section>
-      <h2>Prompt set</h2>
-      <p class="lead">{_e(count)} prompts &middot; intent mix (target 80 / 10 / 10):</p>
-      <div class="chips">{chips}</div>
-      <div class="{skew_cls}">Branded-skew check: {skew_msg}</div>
+      <div class="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">{tiles}</div>
     </section>
     """
 
 
-def _metrics_table(r: dict) -> str:
-    per = r.get("per_engine_metrics") or {}
-    rows: list[str] = []
-    for engine, m in per.items():
-        n_runs = m.get("n_runs", 0)
-        cells = []
-        for key in ("mention", "citation", "share_of_voice"):
-            est = m.get(key) or {}
-            cells.append(
-                "<td>"
-                + ci_bar_svg(
-                    float(est.get("point", 0.0)),
-                    float(est.get("lo", 0.0)),
-                    float(est.get("hi", 0.0)),
-                    n=int(est.get("n", 0) or 0),
-                    label=key.replace("_", " "),
-                )
-                + "</td>"
-            )
-        rows.append(
-            f'<tr><th scope="row">{_e(engine)}<span class="nrun">n={_e(n_runs)}</span>'
-            f"</th>{''.join(cells)}</tr>"
-        )
-    if not rows:
-        rows.append('<tr><td colspan="4" class="muted">no per-engine metrics</td></tr>')
-    return f"""
-    <section>
-      <h2>Per-engine metrics <span class="hint">point ● with 95% confidence band</span></h2>
-      <table class="metrics">
-        <thead><tr><th>engine</th><th>mention rate</th><th>citation rate</th>
-          <th>share of voice</th></tr></thead>
-        <tbody>{''.join(rows)}</tbody>
-      </table>
-      <p class="caption">Scale is 0–100%. Wide bands = high uncertainty (small n /
-      near-degenerate). No single-run point scores are shown without an interval.</p>
-    </section>
-    """
-
-
-def _gap_callout(r: dict) -> str:
-    """The headline finding: mentioned a lot, but own domain cited ~never."""
+# --------------------------------------------------------------------------- #
+# Gap (headline) — Chart.js grouped bar + red flag cards
+# --------------------------------------------------------------------------- #
+def _gap(r: dict) -> str:
     per = r.get("per_engine_metrics") or {}
     cards: list[str] = []
     flagged = 0
     for engine, m in per.items():
-        mention = m.get("mention") or {}
-        citation = m.get("citation") or {}
-        mp = float(mention.get("point", 0.0))
-        cp = float(citation.get("point", 0.0))
+        mp = _f(m.get("mention") or {}, "point")
+        cp = _f(m.get("citation") or {}, "point")
         is_gap = mp >= _GAP_MENTION_MIN and cp <= _GAP_CITATION_MAX
         if is_gap:
             flagged += 1
         badge = (
-            '<span class="badge badge-crit">mentioned, not cited</span>'
+            _badge("mentioned, not cited", "crit")
             if is_gap
-            else '<span class="badge badge-ok">cites its own domain</span>'
+            else _badge("cites its own domain", "ok")
         )
-        cls = "gapcard flagged" if is_gap else "gapcard"
-        mbar = ci_bar_svg(
-            mp, float(mention.get("lo", 0.0)), float(mention.get("hi", 0.0)),
-            n=int(mention.get("n", 0) or 0), label="mention", color=SERIES,
-        )
-        cbar = ci_bar_svg(
-            cp, float(citation.get("lo", 0.0)), float(citation.get("hi", 0.0)),
-            n=int(citation.get("n", 0) or 0), label="citation",
-            color=CRIT if is_gap else SERIES, band="#f7d6d6" if is_gap else BAND,
-        )
+        ring = "ring-1 ring-crit/40 bg-crit/5" if is_gap else "ring-1 ring-line"
+        cbar = "text-crit" if is_gap else "text-accent2"
         cards.append(
-            f'<div class="{cls}"><div class="gaphead">{_e(engine)} {badge}</div>'
-            f'<div class="gaprow"><span class="glab">mention</span>{mbar}</div>'
-            f'<div class="gaprow"><span class="glab">citation</span>{cbar}</div>'
-            f"</div>"
+            f'<div class="rounded-xl border border-line p-4 {ring}">'
+            f'<div class="mb-2 flex items-center justify-between gap-2">'
+            f'<span class="font-semibold text-ink">{_e(engine)}</span>{badge}</div>'
+            f'<div class="space-y-1 text-sm">'
+            f'<div class="flex justify-between"><span class="text-ink2">mention</span>'
+            f'<span class="tabular-nums text-accent">{_pct(mp)}</span></div>'
+            f'<div class="flex justify-between"><span class="text-ink2">citation</span>'
+            f'<span class="tabular-nums {cbar}">{_pct(cp)}</span></div></div></div>'
         )
     lead = (
-        f"<strong>{flagged}</strong> engine(s) mention "
+        f'<strong class="text-crit">{flagged}</strong> engine(s) mention '
         f"{_e(r.get('brand', 'the brand'))} often but cite its own domain at/near zero — "
         "the answer names the brand while sending the citation elsewhere."
         if flagged
         else "No engine shows the mention-without-citation gap on this run."
     )
-    return f"""
-    <section class="gap">
-      <h2>Mention vs. citation gap <span class="hint">the headline finding</span></h2>
-      <p class="lead">{lead}</p>
-      <div class="gapgrid">{''.join(cards) or '<p class="muted">no engines</p>'}</div>
-    </section>
-    """
-
-
-def _reconciliation(r: dict) -> str:
-    recon = r.get("reconciliation") or {}
-    if not recon:
-        return """
-    <section>
-      <h2>Cross-engine reconciliation</h2>
-      <p class="muted">Not available — reconciliation needs ≥2 engines and a target/
-      competitor domain. Skipped for this report.</p>
-    </section>
-    """
-    overlap = recon.get("overlap") or {}
-    mean_j = overlap.get("mean_pairwise_jaccard")
-    uniq = overlap.get("per_engine_unique_domains") or {}
-    uniq_cells = "".join(
-        f'<span class="chip"><b>{_e(e)}</b> {_e(c)}</span>' for e, c in uniq.items()
+    grid = (
+        f'<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{"".join(cards)}</div>'
+        if cards
+        else '<p class="text-muted">no engines</p>'
     )
-    divergence = recon.get("divergence") or []
-    if divergence:
-        div_items = "".join(
-            f"<li><b>{_e(f.get('engine'))}</b> over-indexes "
-            f"<b>{_e(f.get('ecosystem'))}</b> (+{float(f.get('delta', 0.0)) * 100:.0f}% "
-            f"vs cross-engine mean)</li>"
-            for f in divergence
-        )
-        div_block = f"<ul class='divlist'>{div_items}</ul>"
-    else:
-        div_block = (
-            '<p class="muted">No engine over-indexes a single source ecosystem beyond '
-            "the divergence threshold on this run.</p>"
-        )
-    return f"""
-    <section>
-      <h2>Cross-engine reconciliation</h2>
-      <div class="statrow">
-        <div class="stat"><div class="statnum">{_num(mean_j, 3)}</div>
-          <div class="statlab">mean pairwise citation overlap (Jaccard)</div></div>
-      </div>
-      <p class="lead">Unique cited domains per engine:</p>
-      <div class="chips">{uniq_cells}</div>
-      <p class="lead">Source-ecosystem divergence:</p>
-      {div_block}
-    </section>
-    """
+    return (
+        _panel_open("gap", "Mention vs. citation gap", "the headline finding")
+        + f'<p class="mb-4 text-ink2">{lead}</p>'
+        + '<div class="mb-4 h-64"><canvas id="chart-gap"></canvas></div>'
+        + grid
+        + _panel_close()
+    )
 
 
+# --------------------------------------------------------------------------- #
+# Findings / recommendations (verbatim)
+# --------------------------------------------------------------------------- #
+def _list_panel(anchor: str, title: str, hint: str, items: list, tone: str) -> str:
+    if not items:
+        return ""
+    dot = {"ok": "bg-ok", "warn": "bg-warn", "accent": "bg-accent"}.get(tone, "bg-accent")
+    lis = "".join(
+        f'<li class="flex gap-3"><span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full '
+        f'{dot}"></span><span class="text-ink2">{_e(x)}</span></li>'
+        for x in items
+    )
+    return (
+        _panel_open(anchor, title, hint)
+        + f'<ul class="space-y-2.5">{lis}</ul>'
+        + _panel_close()
+    )
+
+
+def _findings(r: dict) -> str:
+    return _list_panel(
+        "findings", "Findings", "what the numbers say", r.get("findings") or [], "accent"
+    )
+
+
+def _recommendations(r: dict) -> str:
+    return _list_panel(
+        "recommendations",
+        "Recommendations",
+        "directional hypotheses to test (not proven levers)",
+        r.get("recommendations") or [],
+        "warn",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Per-engine metrics with CI (Chart.js floating bands + point markers)
+# --------------------------------------------------------------------------- #
+def _metrics(r: dict) -> str:
+    per = r.get("per_engine_metrics") or {}
+    if not per:
+        return (
+            _panel_open("metrics", "Per-engine metrics", "point ● with 95% confidence interval")
+            + '<p class="text-muted">no per-engine metrics</p>'
+            + _panel_close()
+        )
+    charts = "".join(
+        f'<div class="rounded-xl border border-line p-4">'
+        f'<h3 class="mb-2 text-sm font-semibold text-ink">{title}</h3>'
+        f'<div class="h-56"><canvas id="{cid}"></canvas></div></div>'
+        for title, cid in (
+            ("Mention rate", "chart-ci-mention"),
+            ("Citation rate", "chart-ci-citation"),
+            ("Share of voice", "chart-ci-sov"),
+        )
+    )
+    return (
+        _panel_open("metrics", "Per-engine metrics", "point ● with 95% confidence interval")
+        + '<p class="mb-4 text-ink2">Every rate carries its 95% interval — the bright dot is the '
+        "point estimate, the band is [lo, hi]. Wide bands = high uncertainty (small n / "
+        "near-degenerate). No single-run point score is shown without an interval.</p>"
+        + f'<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">{charts}</div>'
+        + _panel_close()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Statistical distinguishability (two-proportion z-test) — verbatim verdicts
+# --------------------------------------------------------------------------- #
 def _distinguishability(r: dict) -> str:
-    """Are engine pairs actually distinguishable on citation rate, or within noise?"""
     per = r.get("per_engine_metrics") or {}
     engines = list(per)
     rows: list[str] = []
@@ -373,162 +338,283 @@ def _distinguishability(r: dict) -> str:
             if n1 <= 0 or n2 <= 0:
                 continue
             res = two_proportion_test(k1, n1, k2, n2)
-            if res.distinguishable:
-                verdict = '<span class="verdict-ok">distinguishable</span>'
-            else:
-                verdict = '<span class="verdict-bad">NOT distinguishable (within noise)</span>'
+            verdict = (
+                _badge("distinguishable", "ok")
+                if res.distinguishable
+                else _badge("NOT distinguishable (within noise)", "crit")
+            )
             rows.append(
-                f'<li><b>{_e(a)}</b> vs <b>{_e(b)}</b>: {verdict} '
-                f'<span class="muted">(Δ={res.diff * 100:+.0f}pp, p={res.p_value:.3f})</span></li>'
+                f'<li class="flex flex-wrap items-center gap-2 rounded-lg border border-line '
+                f'px-3 py-2"><span class="font-semibold text-ink">{_e(a)}</span>'
+                f'<span class="text-muted">vs</span>'
+                f'<span class="font-semibold text-ink">{_e(b)}</span>{verdict}'
+                f'<span class="ml-auto text-xs tabular-nums text-muted">'
+                f"Δ={res.diff * 100:+.0f}pp · p={res.p_value:.3f}</span></li>"
             )
     body = (
-        f"<ul class='distlist'>{''.join(rows)}</ul>"
+        f'<ul class="space-y-2">{"".join(rows)}</ul>'
         if rows
-        else '<p class="muted">Need ≥2 engines with runs to test distinguishability.</p>'
+        else '<p class="text-muted">Need ≥2 engines with runs to test distinguishability.</p>'
     )
-    return f"""
-    <section>
-      <h2>Statistical distinguishability <span class="hint">citation rate, two-proportion
-        z-test (α=0.05)</span></h2>
-      <p class="lead">Where a pair is <em>not</em> distinguishable, the dashboard does not
-      claim one engine cites the brand more than the other — the gap is within noise.</p>
-      {body}
-    </section>
-    """
+    return (
+        _panel_open(
+            "distinguishability",
+            "Statistical distinguishability",
+            "citation rate, two-proportion z-test (α=0.05)",
+        )
+        + '<p class="mb-4 text-ink2">Where a pair is <em>not</em> distinguishable, the dashboard '
+        "does not claim one engine cites the brand more than the other — the gap is within "
+        "noise.</p>"
+        + body
+        + _panel_close()
+    )
 
 
+# --------------------------------------------------------------------------- #
+# Cross-engine reconciliation: numbers + a CSS-grid Jaccard heatmap
+# --------------------------------------------------------------------------- #
+def _heatmap(overlap: dict, engines: list[str]) -> str:
+    if len(engines) < 2:
+        return ""
+    pairwise = overlap.get("pairwise_jaccard") or {}
+    lookup: dict[frozenset, float] = {}
+    for key, val in pairwise.items():
+        parts = str(key).split("|")
+        if len(parts) == 2:
+            lookup[frozenset(parts)] = float(val)
+
+    header = '<div></div>' + "".join(
+        f'<div class="px-1 py-1 text-center text-[11px] font-semibold text-ink2 truncate">'
+        f"{_e(e)}</div>"
+        for e in engines
+    )
+    rows: list[str] = [header]
+    for a in engines:
+        cells = [
+            f'<div class="px-1 py-1 text-right text-[11px] font-semibold text-ink2 truncate">'
+            f"{_e(a)}</div>"
+        ]
+        for b in engines:
+            if a == b:
+                cells.append(
+                    '<div class="flex aspect-square items-center justify-center rounded-md '
+                    'border border-line bg-surface2 text-[11px] tabular-nums text-muted">'
+                    "1.00</div>"
+                )
+                continue
+            v = lookup.get(frozenset((a, b)))
+            if v is None:
+                cells.append(
+                    '<div class="flex aspect-square items-center justify-center rounded-md '
+                    'border border-line bg-surface2 text-[11px] text-muted">—</div>'
+                )
+                continue
+            alpha = 0.10 + 0.85 * max(0.0, min(1.0, v))
+            txt = "#0b0f17" if v >= 0.55 else "#e6edf7"
+            cells.append(
+                f'<div class="flex aspect-square items-center justify-center rounded-md '
+                f'border border-line text-[11px] font-semibold tabular-nums" '
+                f'style="background-color:rgba(34,211,238,{alpha:.3f});color:{txt}">'
+                f"{v:.2f}</div>"
+            )
+        rows.append("".join(cells))
+    n = len(engines)
+    grid_cols = f"minmax(56px,auto) repeat({n}, minmax(0,1fr))"
+    return (
+        '<div class="mt-2 overflow-x-auto"><div class="grid gap-1" '
+        f'style="grid-template-columns:{grid_cols};max-width:640px">'
+        f'{"".join(rows)}</div>'
+        '<p class="mt-2 text-xs text-muted">Pairwise cited-domain overlap (Jaccard). '
+        "Brighter = more shared sources; diagonal is self.</p></div>"
+    )
+
+
+def _reconciliation(r: dict) -> str:
+    recon = r.get("reconciliation") or {}
+    if not recon:
+        return (
+            _panel_open("cross-engine", "Cross-engine reconciliation")
+            + '<p class="text-muted">Not available — reconciliation needs ≥2 engines and a '
+            "target/competitor domain. Skipped for this report.</p>"
+            + _panel_close()
+        )
+    overlap = recon.get("overlap") or {}
+    mean_j = overlap.get("mean_pairwise_jaccard")
+    uniq = overlap.get("per_engine_unique_domains") or {}
+    engines = list((r.get("per_engine_metrics") or {}).keys())
+    if not engines:
+        engines = list(uniq.keys())
+
+    uniq_cells = "".join(
+        f'<span class="inline-flex items-center gap-2 rounded-lg border border-line '
+        f'bg-surface2 px-3 py-1 text-sm"><b class="text-ink">{_e(e)}</b>'
+        f'<span class="tabular-nums text-ink2">{_e(c)}</span></span>'
+        for e, c in uniq.items()
+    )
+    divergence = recon.get("divergence") or []
+    if divergence:
+        div_items = "".join(
+            f'<li class="text-ink2"><b class="text-ink">{_e(f.get("engine"))}</b> over-indexes '
+            f'<b class="text-ink">{_e(f.get("ecosystem"))}</b> '
+            f"(+{float(f.get('delta', 0.0)) * 100:.0f}% vs cross-engine mean)</li>"
+            for f in divergence
+        )
+        div_block = f'<ul class="list-disc space-y-1 pl-5">{div_items}</ul>'
+    else:
+        div_block = (
+            '<p class="text-muted">No engine over-indexes a single source ecosystem beyond the '
+            "divergence threshold on this run.</p>"
+        )
+    return (
+        _panel_open("cross-engine", "Cross-engine reconciliation")
+        + '<div class="mb-4 flex flex-wrap gap-4">'
+        + f'<div class="{_CARD} px-5 py-4"><div class="text-3xl font-bold tabular-nums '
+        + f'text-accent">{_num(mean_j, 3)}</div>'
+        + '<div class="mt-1 text-xs text-muted">mean pairwise overlap (Jaccard)</div></div>'
+        + "</div>"
+        + _heatmap(overlap, engines)
+        + '<p class="mb-2 mt-5 text-ink2">Unique cited domains per engine:</p>'
+        + f'<div class="flex flex-wrap gap-2">{uniq_cells}</div>'
+        + '<p class="mb-2 mt-5 text-ink2">Source-ecosystem divergence:</p>'
+        + div_block
+        + _panel_close()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Top cited domains per engine (Chart.js small multiples)
+# --------------------------------------------------------------------------- #
+def _top_domains(r: dict) -> str:
+    top = r.get("top_domains") or {}
+    target = str(r.get("target_domain") or "").lower().lstrip(".")
+    if not top or not any(top.values()):
+        return ""
+    blocks = "".join(
+        f'<div class="rounded-xl border border-line p-4">'
+        f'<h3 class="mb-2 text-sm font-semibold text-ink">{_e(engine)}</h3>'
+        f'<div class="h-56"><canvas class="top-canvas" data-engine="{_e(engine)}"></canvas>'
+        f"</div></div>"
+        for engine in top
+    )
+    tnote = (
+        f'<p class="mt-4 text-xs text-muted">The target domain <b class="text-accent">'
+        f"{_e(target)}</b> is highlighted where an engine cites it.</p>"
+        if target
+        else ""
+    )
+    return (
+        _panel_open(
+            "top-domains",
+            "Top cited domains per engine",
+            "count of citations in this run",
+        )
+        + f'<div class="grid grid-cols-1 gap-4 md:grid-cols-2">{blocks}</div>'
+        + tnote
+        + _panel_close()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Prompt set + prompts used
+# --------------------------------------------------------------------------- #
+def _prompt_set(r: dict) -> str:
+    ps = r.get("prompt_set") or {}
+    count = ps.get("count", "—")
+    intents = ps.get("intents") or {}
+    skew = ps.get("skew") or {}
+    skew_ok = bool(skew.get("ok", False))
+    skew_msg = skew.get("message", "—")
+    chips = "".join(
+        f'<span class="inline-flex items-center gap-2 rounded-lg border border-line '
+        f'bg-surface2 px-3 py-1 text-sm"><b class="text-ink">{_e(k)}</b>'
+        f'<span class="text-ink2">{int(v.get("count", 0))} '
+        f'({v.get("fraction", 0.0) * 100:.0f}%)</span></span>'
+        for k, v in intents.items()
+    )
+    verdict = _badge(skew_msg, "ok" if skew_ok else "crit")
+    return (
+        _panel_open("prompt-set", "Prompt set")
+        + f'<p class="mb-3 text-ink2">{_e(count)} prompts · intent mix (target 80 / 10 / 10):</p>'
+        + f'<div class="mb-4 flex flex-wrap gap-2">{chips}</div>'
+        + f'<div class="text-sm">Branded-skew check: {verdict}</div>'
+        + _panel_close()
+    )
+
+
+def _prompts_used(r: dict) -> str:
+    prompts = r.get("prompts") or []
+    if not prompts:
+        return ""
+    lis = "".join(
+        f'<li class="flex flex-wrap items-baseline gap-3">'
+        f'<span class="inline-flex shrink-0 rounded-md bg-accent/10 px-2 py-0.5 text-[11px] '
+        f'font-semibold uppercase tracking-wide text-accent">{_e(p.get("intent", "—"))}</span>'
+        f'<span class="text-ink2">{_e(p.get("text", ""))}</span></li>'
+        for p in prompts
+    )
+    return (
+        _panel_open("prompts-used", "Prompts used", "the exact questions asked, per intent")
+        + f'<ol class="space-y-2.5">{lis}</ol>'
+        + _panel_close()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Methodology card + verbatim caveats
+# --------------------------------------------------------------------------- #
 def _methodology(r: dict) -> str:
     card = ((r.get("reconciliation") or {}).get("methodology")) or {}
     if not card:
-        return """
-    <section>
-      <h2>Methodology card</h2>
-      <p class="muted">No methodology card in this report (reconciliation skipped).</p>
-    </section>
-    """
+        return (
+            _panel_open("methodology", "Methodology card")
+            + '<p class="text-muted">No methodology card in this report '
+            "(reconciliation skipped).</p>"
+            + _panel_close()
+        )
     access = card.get("access_method") or {}
     engines = card.get("engines") or {}
     access_rows = "".join(
-        f"<tr><td>{_e(e)}</td><td>{_e(engines.get(e, '—'))}</td>"
-        f"<td>{_e(access.get(e, '—'))}</td></tr>"
+        f'<tr class="border-b border-line"><td class="py-2 pr-4 text-ink">{_e(e)}</td>'
+        f'<td class="py-2 pr-4 text-ink2">{_e(engines.get(e, "—"))}</td>'
+        f'<td class="py-2 text-ink2">{_e(access.get(e, "—"))}</td></tr>'
         for e in sorted(set(access) | set(engines))
     )
-    caveats = "".join(f"<li>{_e(c)}</li>" for c in (card.get("caveats") or []))
+    caveats = "".join(
+        f'<li class="text-ink2">{_e(c)}</li>' for c in (card.get("caveats") or [])
+    )
     fields = [
         ("generated", card.get("generated_utc")),
         ("prompts × repeats", f"{card.get('n_prompts')} × {card.get('repeats_per_prompt')}"),
         ("locale", card.get("locale")),
         ("domain normalization", card.get("domain_normalization")),
     ]
-    field_rows = "".join(
-        f'<div class="mfield"><div class="mkey">{_e(k)}</div>'
-        f'<div class="mval">{_e(v)}</div></div>'
+    field_cards = "".join(
+        f'<div class="rounded-lg border border-line bg-surface2 px-3 py-2">'
+        f'<div class="text-[11px] uppercase tracking-wide text-muted">{_e(k)}</div>'
+        f'<div class="break-words text-sm text-ink">{_e(v)}</div></div>'
         for k, v in fields
     )
-    return f"""
-    <section>
-      <h2>Methodology card</h2>
-      <div class="mfields">{field_rows}</div>
-      <table class="access">
-        <thead><tr><th>engine</th><th>model</th><th>access method</th></tr></thead>
-        <tbody>{access_rows}</tbody>
-      </table>
-      <div class="caveats"><div class="clab">Caveats (verbatim)</div>
-        <ul>{caveats}</ul></div>
-    </section>
-    """
-
-
-def _findings(r: dict) -> str:
-    """Plain-English findings (from the insights layer) — restated numbers."""
-    items = r.get("findings") or []
-    if not items:
-        return ""
-    lis = "".join(f"<li>{_e(x)}</li>" for x in items)
-    return f"""
-    <section class="insight">
-      <h2>Findings <span class="hint">what the numbers say</span></h2>
-      <ul class="insight-list">{lis}</ul>
-    </section>
-    """
-
-
-def _recommendations(r: dict) -> str:
-    """GEO recommendations (from the insights layer) — hedged, evidence-tied."""
-    items = r.get("recommendations") or []
-    if not items:
-        return ""
-    lis = "".join(f"<li>{_e(x)}</li>" for x in items)
-    return f"""
-    <section class="insight">
-      <h2>Recommendations <span class="hint">directional hypotheses to test (not proven
-        levers)</span></h2>
-      <ul class="insight-list">{lis}</ul>
-    </section>
-    """
-
-
-def _prompts_used(r: dict) -> str:
-    """The prompt set that produced this report, with intent labels."""
-    prompts = r.get("prompts") or []
-    if not prompts:
-        return ""
-    lis = "".join(
-        f'<li><span class="pintent">{_e(p.get("intent", "—"))}</span>'
-        f'<span class="ptext">{_e(p.get("text", ""))}</span></li>'
-        for p in prompts
+    return (
+        _panel_open("methodology", "Methodology card")
+        + '<div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">'
+        + field_cards
+        + "</div>"
+        + '<div class="overflow-x-auto"><table class="w-full text-left text-sm">'
+        + '<thead><tr class="border-b border-line text-xs uppercase tracking-wide text-muted">'
+        + '<th class="py-2 pr-4">engine</th><th class="py-2 pr-4">model</th>'
+        + '<th class="py-2">access method</th></tr></thead>'
+        + f"<tbody>{access_rows}</tbody></table></div>"
+        + '<div class="mt-5 border-l-2 border-warn pl-4">'
+        + '<div class="mb-1 text-sm font-semibold text-warn">Caveats (verbatim)</div>'
+        + f'<ul class="list-disc space-y-1 pl-5">{caveats}</ul></div>'
+        + _panel_close()
     )
-    return f"""
-    <section>
-      <h2>Prompts used <span class="hint">the exact questions asked, per intent</span></h2>
-      <ol class="prompts-used">{lis}</ol>
-    </section>
-    """
 
 
-def _is_target(domain: str, target: str) -> bool:
-    d = domain.lower().lstrip(".")
-    return bool(target) and (d == target or d.endswith("." + target))
-
-
-def _top_domains(r: dict) -> str:
-    """Per-engine most-cited domains with counts (the 'what actually gets cited' view)."""
-    top = r.get("top_domains") or {}
-    target = str(r.get("target_domain") or "").lower().lstrip(".")
-    if not top or not any(top.values()):
-        return ""
-    blocks: list[str] = []
-    for engine, entries in top.items():
-        rows: list[str] = []
-        for entry in entries:
-            dom, cnt = str(entry[0]), int(entry[1])
-            cls = ' class="tdom-target"' if _is_target(dom, target) else ""
-            rows.append(
-                f'<tr{cls}><td>{_e(dom)}</td><td class="tdom-count">{_e(cnt)}</td></tr>'
-            )
-        body = "".join(rows) or '<tr><td class="muted" colspan="2">no citations</td></tr>'
-        blocks.append(
-            f'<div class="tdom-block"><h3>{_e(engine)}</h3>'
-            f'<table class="tdom"><tbody>{body}</tbody></table></div>'
-        )
-    tnote = (
-        f'<p class="caption">The target domain <b>{_e(target)}</b> is highlighted where an '
-        "engine cites it.</p>"
-        if target
-        else ""
-    )
-    return f"""
-    <section>
-      <h2>Top cited domains per engine <span class="hint">count of citations in this
-        run</span></h2>
-      <div class="tdom-grid">{''.join(blocks)}</div>
-      {tnote}
-    </section>
-    """
-
-
+# --------------------------------------------------------------------------- #
+# Evidence transcript (native <details>/<summary>, no JS)
+# --------------------------------------------------------------------------- #
 def _transcript(r: dict) -> str:
-    """Evidence: per engine, a collapsible block per prompt (answer + citations). No JS."""
     tr = r.get("transcript") or {}
     if not tr:
         return ""
@@ -538,201 +624,294 @@ def _transcript(r: dict) -> str:
         for s in samples or []:
             cites = s.get("citations") or []
             cite_items = "".join(
-                f'<li><span class="cpos">{_e(c.get("position"))}</span>'
-                f'<b>{_e(c.get("domain"))}</b>'
-                f'<span class="curl">{_e(c.get("url"))}</span></li>'
+                f'<li class="flex flex-wrap items-baseline gap-2">'
+                f'<span class="w-6 shrink-0 tabular-nums text-muted">{_e(c.get("position"))}</span>'
+                f'<b class="text-ink">{_e(c.get("domain"))}</b>'
+                f'<span class="break-all text-accent">{_e(c.get("url"))}</span></li>'
                 for c in cites
             )
             cite_block = (
-                f'<ol class="cites">{cite_items}</ol>'
+                f'<ol class="mt-2 space-y-1 text-xs">{cite_items}</ol>'
                 if cite_items
-                else '<p class="muted">no citations for this answer</p>'
+                else '<p class="mt-2 text-xs text-muted">no citations for this answer</p>'
             )
             details.append(
-                f"<details><summary>{_e(s.get('prompt_text', ''))}</summary>"
-                f'<div class="answer">{_e(s.get("answer", ""))}</div>{cite_block}</details>'
+                '<details class="rounded-lg border border-line bg-surface2 px-4 py-2">'
+                f'<summary class="cursor-pointer py-1 font-medium text-ink">'
+                f"{_e(s.get('prompt_text', ''))}</summary>"
+                '<div class="my-2 whitespace-pre-wrap border-l-2 border-line bg-surface '
+                f'px-3 py-2 text-sm text-ink2">{_e(s.get("answer", ""))}</div>'
+                f"{cite_block}</details>"
             )
         blocks.append(
-            f'<div class="tblock"><h3>{_e(engine)}</h3>{"".join(details)}</div>'
+            f'<div class="space-y-2"><h3 class="text-sm font-semibold text-ink">{_e(engine)}</h3>'
+            f'{"".join(details)}</div>'
         )
-    return f"""
-    <section>
-      <h2>Evidence &middot; transcript <span class="hint">one representative answer per
-        prompt, with its citations</span></h2>
-      <p class="lead">Expand any prompt to read the model's actual answer and the exact
-      sources it cited (url &middot; domain &middot; position).</p>
-      {''.join(blocks)}
-    </section>
-    """
+    return (
+        _panel_open(
+            "evidence",
+            "Evidence · transcript",
+            "one representative answer per prompt, with citations",
+        )
+        + '<p class="mb-4 text-ink2">Expand any prompt to read the model\'s actual answer and the '
+        "exact sources it cited (url · domain · position).</p>"
+        + f'<div class="space-y-5">{"".join(blocks)}</div>'
+        + _panel_close()
+    )
 
 
 def _notes(r: dict) -> str:
     notes = r.get("notes") or []
     if not notes:
         return ""
-    items = "".join(f"<li>{_e(n)}</li>" for n in notes)
-    return f"""
-    <section>
-      <h2>Notes</h2>
-      <ul class="notes">{items}</ul>
-    </section>
-    """
+    items = "".join(f'<li class="text-ink2">{_e(n)}</li>' for n in notes)
+    return (
+        _panel_open("notes", "Notes")
+        + f'<ul class="list-disc space-y-1 pl-5">{items}</ul>'
+        + _panel_close()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Head: Tailwind + Chart.js CDNs, dark config
+# --------------------------------------------------------------------------- #
+_TAILWIND_CONFIG = """
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        bg: '#0b0f17', surface: '#0f1626', surface2: '#182236', line: '#1f2b40',
+        accent: '#22d3ee', accent2: '#f472b6', warn: '#fbbf24', crit: '#f87171', ok: '#34d399',
+        ink: '#e6edf7', ink2: '#94a3b8', muted: '#64748b'
+      },
+      fontFamily: {
+        sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif']
+      }
+    }
+  }
+};
+"""
+
+_NAV = [
+    ("overview", "Overview"),
+    ("gap", "Gap"),
+    ("findings", "Findings"),
+    ("metrics", "Metrics"),
+    ("cross-engine", "Cross-engine"),
+    ("evidence", "Evidence"),
+    ("methodology", "Methodology"),
+]
+
+
+def _topbar() -> str:
+    links = "".join(
+        f'<a href="#{a}" class="rounded-md px-2.5 py-1 text-sm text-ink2 '
+        f'transition-colors hover:bg-surface2 hover:text-accent">{_e(label)}</a>'
+        for a, label in _NAV
+    )
+    return (
+        '<header class="sticky top-0 z-50 border-b border-line bg-bg/85 backdrop-blur">'
+        '<div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-1 gap-y-1 px-4 py-3">'
+        '<span class="mr-3 flex items-center gap-2 font-bold text-ink">'
+        '<span class="h-2.5 w-2.5 rounded-full bg-accent shadow-[0_0_10px] shadow-accent"></span>'
+        "GEO Platform</span>"
+        f'<nav class="flex flex-wrap items-center gap-1">{links}</nav>'
+        "</div></header>"
+    )
+
+
+# --------------------------------------------------------------------------- #
+# The Chart.js builder (one script, reads the injected JSON blob)
+# --------------------------------------------------------------------------- #
+_CHART_JS = r"""
+(function () {
+  var el = document.getElementById('geo-report');
+  if (!el || typeof Chart === 'undefined') return;
+  var R;
+  try { R = JSON.parse(el.textContent); } catch (e) { return; }
+  var per = R.per_engine_metrics || {};
+  var engines = Object.keys(per);
+  var C = { accent: '#22d3ee', accent2: '#f472b6', warn: '#fbbf24',
+            crit: '#f87171', ok: '#34d399' };
+
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.borderColor = 'rgba(148,163,184,0.12)';
+  Chart.defaults.font.family = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
+
+  function withAlpha(hex, a) {
+    var n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  function pt(est) { return est && est.point != null ? est.point * 100 : 0; }
+  function lo(est) { return est && est.lo != null ? est.lo * 100 : 0; }
+  function hi(est) { return est && est.hi != null ? est.hi * 100 : 0; }
+  function nOf(est) { return est && est.n != null ? est.n : 0; }
+
+  var pctAxis = {
+    min: 0, max: 100,
+    ticks: { callback: function (v) { return v + '%'; } },
+    grid: { color: 'rgba(148,163,184,0.10)' }
+  };
+
+  // 1) Mention vs citation gap — grouped horizontal bars.
+  (function () {
+    var cv = document.getElementById('chart-gap');
+    if (!cv || !engines.length) return;
+    var mention = engines.map(function (e) { return pt(per[e].mention); });
+    var citation = engines.map(function (e) { return pt(per[e].citation); });
+    new Chart(cv, {
+      type: 'bar',
+      data: {
+        labels: engines,
+        datasets: [
+          { label: 'Mention %', data: mention, backgroundColor: C.accent, borderRadius: 4,
+            borderSkipped: false },
+          { label: 'Citation %', borderRadius: 4, borderSkipped: false,
+            data: citation,
+            backgroundColor: citation.map(function (c, i) {
+              return (mention[i] >= 40 && c <= 5) ? C.crit : C.accent2; }) }
+        ]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: pctAxis, y: { grid: { display: false } } },
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: { callbacks: { label: function (c) {
+            return c.dataset.label + ': ' + c.parsed.x.toFixed(0) + '%'; } } }
+        }
+      }
+    });
+  })();
+
+  // 2) Per-engine rate with a 95% CI — floating [lo,hi] band + a point marker.
+  function ciChart(id, key, color) {
+    var cv = document.getElementById(id);
+    if (!cv || !engines.length) return;
+    var bands = engines.map(function (e) { return [lo(per[e][key]), hi(per[e][key])]; });
+    var points = engines.map(function (e) { return { x: pt(per[e][key]), y: e }; });
+    new Chart(cv, {
+      type: 'bar',
+      data: {
+        labels: engines,
+        datasets: [
+          { label: '95% CI', data: bands, backgroundColor: withAlpha(color, 0.28),
+            borderColor: withAlpha(color, 0.55), borderWidth: 1, borderSkipped: false,
+            borderRadius: 3, barPercentage: 0.5, categoryPercentage: 0.7, order: 2 },
+          { type: 'scatter', label: 'point', data: points, parsing: false,
+            backgroundColor: color, borderColor: '#0b0f17', borderWidth: 1,
+            pointRadius: 5, pointHoverRadius: 7, order: 1 }
+        ]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: pctAxis, y: { type: 'category', labels: engines, grid: { display: false } } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (c) {
+            var e = engines[c.dataIndex] || c.raw.y; var est = per[e] && per[e][key];
+            if (c.dataset.type === 'scatter') {
+              return e + ': ' + pt(est).toFixed(0) + '% (point)';
+            }
+            return '95% CI ' + lo(est).toFixed(0) + '%–' + hi(est).toFixed(0) +
+              '% (n=' + nOf(est) + ')';
+          } } }
+        }
+      }
+    });
+  }
+  ciChart('chart-ci-mention', 'mention', C.accent);
+  ciChart('chart-ci-citation', 'citation', C.accent2);
+  ciChart('chart-ci-sov', 'share_of_voice', C.warn);
+
+  // 3) Per-engine most-cited domains — small-multiple horizontal bars.
+  var target = String(R.target_domain || '').toLowerCase().replace(/^\.+/, '');
+  function isTarget(d) {
+    d = String(d).toLowerCase().replace(/^\.+/, '');
+    return !!target && (d === target || d.endsWith('.' + target));
+  }
+  var top = R.top_domains || {};
+  document.querySelectorAll('canvas.top-canvas').forEach(function (cv) {
+    var e = cv.getAttribute('data-engine');
+    var entries = (top[e] || []).slice(0, 8);
+    if (!entries.length) return;
+    var labels = entries.map(function (x) { return x[0]; });
+    var counts = entries.map(function (x) { return x[1]; });
+    var colors = labels.map(function (d) {
+      return isTarget(d) ? C.accent : withAlpha(C.accent2, 0.6); });
+    new Chart(cv, {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'citations', data: counts,
+        backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.10)' } },
+                  y: { grid: { display: false } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+  });
+})();
+"""
 
 
 # --------------------------------------------------------------------------- #
 # Page assembly
 # --------------------------------------------------------------------------- #
-_CSS = f"""
-:root {{ color-scheme: light; }}
-* {{ box-sizing: border-box; }}
-body {{
-  margin: 0; background: {PLANE}; color: {INK};
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.5; font-size: 15px;
-}}
-.wrap {{ max-width: 900px; margin: 0 auto; padding: 32px 20px 64px; }}
-header {{ border-bottom: 1px solid {BORDER}; padding-bottom: 20px; margin-bottom: 8px; }}
-.eyebrow {{ text-transform: uppercase; letter-spacing: .08em; font-size: 11px;
-  color: {MUTED}; font-weight: 600; }}
-h1 {{ margin: 4px 0 2px; font-size: 30px; }}
-h2 {{ font-size: 18px; margin: 0 0 12px; }}
-.sub {{ color: {INK2}; font-size: 16px; }}
-.meta {{ margin-top: 12px; display: flex; gap: 14px; flex-wrap: wrap;
-  align-items: center; color: {INK2}; font-size: 13px; }}
-.hint {{ font-weight: 400; font-size: 12px; color: {MUTED}; }}
-.badge {{ display: inline-block; padding: 2px 9px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; }}
-.badge-ok {{ background: #e4f3e4; color: #146c14; }}
-.badge-warn {{ background: #fbefd2; color: #8a5b00; }}
-.badge-crit {{ background: #fadbdb; color: #a3241f; }}
-.banner {{ margin-top: 16px; padding: 12px 14px; border-radius: 8px; font-size: 14px; }}
-.banner-warn {{ background: #fbefd2; color: #7a4f00; border: 1px solid #f0d38a; }}
-section {{ margin: 30px 0; padding-top: 8px; }}
-.lead {{ color: {INK2}; margin: 4px 0 10px; }}
-.caption, .muted {{ color: {MUTED}; font-size: 12.5px; }}
-.chips {{ display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }}
-.chip {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 6px;
-  padding: 4px 10px; font-size: 13px; }}
-.chip b {{ color: {INK}; }}
-.verdict-ok {{ color: {GOOD}; font-weight: 600; }}
-.verdict-bad {{ color: {CRIT}; font-weight: 600; }}
-table {{ border-collapse: collapse; width: 100%; }}
-table.metrics th, table.metrics td {{ text-align: left; padding: 8px 10px;
-  border-bottom: 1px solid {GRID}; vertical-align: middle; }}
-table.metrics thead th {{ font-size: 12px; color: {MUTED}; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .04em; }}
-table.metrics th[scope=row] {{ font-weight: 600; white-space: nowrap; }}
-.nrun {{ display: block; font-weight: 400; font-size: 11px; color: {MUTED}; }}
-.gap {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px;
-  padding: 18px 20px; }}
-.gapgrid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px; }}
-.gapcard {{ border: 1px solid {GRID}; border-radius: 10px; padding: 12px 14px;
-  background: {PLANE}; }}
-.gapcard.flagged {{ border-color: {CRIT}; background: #fdf4f4; }}
-.gaphead {{ font-weight: 600; margin-bottom: 6px; display: flex; gap: 8px;
-  align-items: center; justify-content: space-between; }}
-.gaprow {{ display: flex; align-items: center; gap: 8px; }}
-.glab {{ width: 62px; font-size: 12px; color: {INK2}; }}
-.statrow {{ display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }}
-.stat {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 10px;
-  padding: 12px 16px; min-width: 180px; }}
-.statnum {{ font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }}
-.statlab {{ color: {MUTED}; font-size: 12px; }}
-.divlist, .distlist, .notes {{ margin: 4px 0; padding-left: 20px; }}
-.divlist li, .distlist li, .notes li {{ margin: 4px 0; }}
-.mfields {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px; margin-bottom: 14px; }}
-.mfield {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 8px;
-  padding: 8px 12px; }}
-.mkey {{ font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-  color: {MUTED}; }}
-.mval {{ font-size: 13px; color: {INK}; word-break: break-word; }}
-table.access th, table.access td {{ text-align: left; padding: 6px 10px; font-size: 13px;
-  border-bottom: 1px solid {GRID}; }}
-table.access thead th {{ color: {MUTED}; font-size: 11px; text-transform: uppercase; }}
-.caveats {{ margin-top: 14px; border-left: 3px solid {WARN}; padding: 4px 0 4px 14px; }}
-.clab {{ font-weight: 600; font-size: 13px; margin-bottom: 4px; }}
-.caveats ul {{ margin: 4px 0; padding-left: 18px; color: {INK2}; font-size: 13.5px; }}
-svg.cibar {{ display: inline-block; vertical-align: middle; }}
-/* Insights (findings / recommendations) */
-.insight {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px;
-  padding: 16px 20px; }}
-.insight-list {{ margin: 4px 0; padding-left: 20px; }}
-.insight-list li {{ margin: 7px 0; color: {INK}; }}
-/* Prompt list */
-.prompts-used {{ margin: 4px 0; padding-left: 22px; }}
-.prompts-used li {{ margin: 6px 0; }}
-.pintent {{ display: inline-block; min-width: 96px; margin-right: 8px; font-size: 11px;
-  text-transform: uppercase; letter-spacing: .04em; color: {MUTED}; font-weight: 600; }}
-.ptext {{ color: {INK}; }}
-/* Cited-domain tables */
-.tdom-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px; }}
-.tdom-block {{ border: 1px solid {GRID}; border-radius: 10px; padding: 10px 12px;
-  background: {SURFACE}; }}
-.tdom-block h3 {{ margin: 0 0 6px; font-size: 13px; }}
-table.tdom td {{ padding: 3px 6px; font-size: 13px; border-bottom: 1px solid {GRID}; }}
-.tdom-count {{ text-align: right; font-variant-numeric: tabular-nums; color: {INK2}; }}
-tr.tdom-target td {{ background: #e4f3e4; font-weight: 600; }}
-/* Evidence / transcript */
-.tblock {{ margin: 14px 0; }}
-.tblock h3 {{ margin: 0 0 6px; font-size: 15px; }}
-details {{ border: 1px solid {GRID}; border-radius: 8px; margin: 6px 0; background: {SURFACE};
-  padding: 4px 12px; }}
-details[open] {{ background: {PLANE}; }}
-summary {{ cursor: pointer; font-weight: 600; padding: 6px 0; color: {INK}; }}
-.answer {{ white-space: pre-wrap; color: {INK2}; font-size: 13.5px; margin: 8px 0;
-  padding: 8px 10px; border-left: 3px solid {AXIS}; background: {PLANE}; }}
-.cites {{ margin: 6px 0; padding-left: 20px; }}
-.cites li {{ margin: 3px 0; font-size: 12.5px; }}
-.cpos {{ display: inline-block; min-width: 20px; color: {MUTED};
-  font-variant-numeric: tabular-nums; }}
-.cites b {{ color: {INK}; margin-right: 6px; }}
-.curl {{ color: {SERIES}; word-break: break-all; margin-left: 6px; }}
-footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid {BORDER};
-  color: {MUTED}; font-size: 12px; }}
-"""
+def _report_json_blob(report: dict) -> str:
+    """Serialize the report for the client, escaping `</` so it can't close the script."""
+    raw = json.dumps(report, ensure_ascii=False, default=str)
+    return raw.replace("</", "<\\/")
 
 
 def render_dashboard(report: dict) -> str:
-    """Render a complete, standalone HTML document from a GeoReport dict.
+    """Render a complete DARK HTML dashboard from a GeoReport dict.
 
-    No external assets, no scripts, no network — everything (CSS + SVG charts) is
-    inlined, so the returned string is a file that opens directly in any browser.
+    Tailwind + Chart.js are loaded from CDNs (internet-required — the user's choice).
+    All server-rendered text is HTML-escaped; the report is also injected as a JSON blob
+    that the client-side script reads to build every Chart.js chart.
     """
     brand = _e(report.get("brand", "GEO report"))
     body = "".join(
         [
-            _header(report),
-            _prompt_set(report),
-            _metrics_table(report),
-            _gap_callout(report),
+            _hero(report),
+            _gap(report),
             _findings(report),
             _recommendations(report),
-            _reconciliation(report),
+            _metrics(report),
             _distinguishability(report),
-            _methodology(report),
+            _reconciliation(report),
             _top_domains(report),
+            _prompt_set(report),
             _prompts_used(report),
+            _methodology(report),
             _transcript(report),
             _notes(report),
         ]
     )
+    data_blob = _report_json_blob(report)
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GEO report — {brand}</title>
-<style>{_CSS}</style>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>{_TAILWIND_CONFIG}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
-<body>
-<main class="wrap">
+<body class="min-h-screen bg-bg font-sans text-ink antialiased">
+{_topbar()}
+<main class="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6">
 {body}
-<footer>Measurement-honest GEO platform · rates carry 95% confidence intervals ·
-self-contained offline report (no network, no external assets).</footer>
+<footer class="border-t border-line pt-6 text-xs text-muted">
+Measurement-honest GEO platform · every rate carries a 95% confidence interval ·
+charts by Chart.js, styling by Tailwind (CDN).
+</footer>
 </main>
+<script type="application/json" id="geo-report">{data_blob}</script>
+<script>{_CHART_JS}</script>
 </body>
 </html>
 """

@@ -30,9 +30,10 @@ Key flags: `--engines` (default all four), `--prompts` (30), `--repeats` (5), `-
 `--locale`, `--out-dir` (default `data/reports/`), `--live`.
 
 ```bash
-# Render a saved JSON report into a self-contained HTML dashboard (Task A2, pocs/dashboard)
+# Render a saved JSON report into a modern dark HTML dashboard (Task A2, pocs/dashboard)
 uv run python app/geo.py report --input data/reports/asana_2026-08-14.json
-# -> writes data/reports/asana_2026-08-14.html; open it in any browser (no server needed)
+# -> writes data/reports/asana_2026-08-14.html; open in a browser (Tailwind + Chart.js
+#    load from CDN, so viewing needs internet)
 ```
 The dashboard shows every rate with its 95% CI, flags the mention-vs-citation gap, gives
 two-proportion-test distinguishability verdicts, and renders the methodology card verbatim.

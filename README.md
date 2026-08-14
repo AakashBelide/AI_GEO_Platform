@@ -17,7 +17,7 @@ reconciliation.**
 - **`TASKS.md`** — the concrete build plan and task graph.
 
 ## Status
-🟢 End-to-end pipeline + visual dashboard working: **164 tests passing, ruff-clean.** POCs built
+🟢 End-to-end pipeline + visual dashboard working: **202 tests passing, ruff-clean.** POCs built
 for F2/F3 (fact store + 4-engine connectors under a $2/provider budget guard), O1 (statistical
 rigor), C1 (safe crawler), R1/R3 (onboarding + keyword→prompt), R2 (metrics with confidence
 intervals), O3 (cross-engine reconciliation), A2 (local HTML dashboard). All wired behind one CLI

@@ -18,11 +18,11 @@ mocked/replayed; crawler uses saved fixtures).
 | `metrics/` | R2 — mention/citation/SoV/position/sentiment | No (synthetic) | ☑ 20 tests |
 | `keyword_to_prompt/` | R3 — keyword → prompt bootstrap | No | ☑ 14 tests |
 | `reconcile/` | O3 — cross-engine reconciliation | No (offline); live runner optional | ☑ 13 tests + live-verified |
-| `dashboard/` | A2 — GeoReport → self-contained HTML dashboard | No | ☑ 21 tests |
+| `dashboard/` | A2 — GeoReport → dark Tailwind+Chart.js dashboard | No (render); CDN to view | ☑ 24 tests |
 | `insights/` | A2 — findings + GEO recommendations (evidence-tied) | No | ☑ 20 tests |
 | `causal/` | O2 — controlled before/after attribution | Yes | ☐ |
 
-**199 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
+**202 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
 `../ANALYSIS_REPORT.md` for the running log of decisions, costs, and live findings.
 Every suite runs fully offline; live engine calls happen only in `connectors/smoke.py`
 under the $2/provider budget guard.

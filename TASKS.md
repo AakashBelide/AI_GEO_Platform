@@ -261,6 +261,9 @@ X1 testing / X2 lint / X3 docs run throughout.
 > top-cited-domains table) reconstructed from the fact store (`app/store_reader.py`), plus an
 > interpretation layer `pocs/insights/` (evidence-tied findings + hedged GEO recommendations, reusing
 > `two_proportion_test`). `geo report --store <db>` enriches a saved report; pipeline populates it natively.
+> **Redesigned** into a modern **dark dashboard** (Tailwind + Chart.js via CDN): hero + stat tiles,
+> interactive gap chart, per-engine CI-band charts, top-domain small-multiples, CSS-grid Jaccard
+> heatmap. Trade-off: rendered page needs internet (CDN) — no longer a fully offline single file.
 - **Depends on:** A1. Tech TBD (start with static HTML/matplotlib; optional Next/React later).
 - **Subtasks:** per-brand citation frequency **with Wilson CIs**; SoV by engine; cross-engine
   overlap chart; drift chart; "not statistically distinguishable" callouts.

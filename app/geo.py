@@ -19,7 +19,10 @@ from pathlib import Path
 
 import _paths  # noqa: F401  (side effect: put pocs/* on sys.path)
 from dashboard import render_dashboard
+from insights import generate_findings, generate_recommendations
+from insights import top_domains as compute_top_domains
 from pipeline import GeoConfig, GeoReport, run_pipeline
+from store_reader import read_evidence
 
 
 def _csv(value: str | None) -> tuple[str, ...]:
@@ -133,10 +136,34 @@ def _default_html_path(input_path: Path, out_dir: Path) -> Path:
     return out_dir / (input_path.stem + ".html")
 
 
+def _enrich_from_store(report: dict, store_path: str) -> dict:
+    """Attach the raw evidence + interpretation layer to a report using the fact store.
+
+    Lets a JSON report written before the evidence layer existed be re-rendered with its
+    prompts / transcript / top-domains / findings / recommendations — with **zero spend**,
+    since everything is read back from `data/geo.sqlite` (no engine is re-called).
+    """
+    evidence = read_evidence(store_path)
+    report["prompts"] = evidence["prompts"]
+    report["transcript"] = evidence["transcript"]
+    report["top_domains"] = compute_top_domains(evidence["citations_by_engine"])
+    report["target_domain"] = evidence["target_domain"]
+    report["findings"] = generate_findings(report)
+    report["recommendations"] = generate_recommendations(report)
+    return report
+
+
 def cmd_report(args) -> int:
-    """Render a saved JSON GeoReport into a self-contained HTML dashboard (Task A2)."""
+    """Render a saved JSON GeoReport into a self-contained HTML dashboard (Task A2).
+
+    With ``--store``, the report is first enriched with the raw evidence (prompts,
+    per-engine answers + citations, top cited domains) and the interpretation layer
+    (findings, recommendations) reconstructed from the fact store — no engine re-called.
+    """
     input_path = Path(args.input)
     report = json.loads(input_path.read_text())
+    if args.store:
+        report = _enrich_from_store(report, args.store)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = Path(args.output) if args.output else _default_html_path(input_path, out_dir)
@@ -171,6 +198,10 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("--output", help="HTML output path (default: <input>.html in --out-dir)")
     rep.add_argument("--out-dir", default="data/reports",
                      help="directory for the default output path (default: data/reports)")
+    rep.add_argument("--store",
+                     help="fact-store path (e.g. data/geo.sqlite) to reconstruct the "
+                          "prompts/transcript/top-domains + findings/recommendations "
+                          "(no engine is re-called; zero spend)")
     rep.set_defaults(func=cmd_report)
     return p
 

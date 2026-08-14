@@ -26,9 +26,10 @@ plan in `TASKS.md`.
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 | Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
 | End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 20 | No (offline); `--live` optional |
-| Local HTML dashboard (CI bars, gap callout, distinguishability) | A2 | `pocs/dashboard/` | 15 | No |
+| Local HTML dashboard (CI bars, gap callout, distinguishability) | A2 | `pocs/dashboard/` | 21 | No |
+| Interpretation layer: findings + GEO recommendations (evidence-tied) | A2 | `pocs/insights/` | 20 | No |
 
-**Total: 164 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 199 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -49,6 +50,23 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-14 — A2 extended: evidence drill-down + findings/recommendations
+- **`pocs/insights/` (20 tests) + `app/store_reader.py` (6 tests).** The dashboard now carries the
+  underlying EVIDENCE and an INTERPRETATION layer, both reconstructed from `data/geo.sqlite` for the
+  real Asana run (no re-spend, no network):
+  - **Evidence:** the 10 prompts, and per engine a collapsible `<details>` transcript per prompt with
+    the model's actual answer + citations (url/domain/position); plus a **top-cited-domains-per-engine**
+    table (target highlighted).
+  - **Findings** (deterministic, restate the numbers) and **Recommendations** (evidence-tied, hedged as
+    directional hypotheses; every one names a concrete domain/engine/count; causal proof deferred to O2).
+    `pocs/insights/insights.py` reuses `pocs/rigor.two_proportion_test`.
+- Pipeline now populates `prompts/transcript/top_domains/findings/recommendations` natively; `geo report
+  --store <db>` enriches a saved JSON from the fact store. Real findings on the Asana data e.g.:
+  *"openai mentions Asana in 82% of answers but cites asana.com in 0%"*, *"most-cited domains for this
+  category are thedigitalprojectmanager.com (101), project-management.com (94), reddit.com (77)…"*,
+  *"anthropic and openai are NOT statistically distinguishable on citation rate (p=1.00)"*.
+- Regenerated `data/reports/asana_2026-08-14.html` (118 KB, 40 transcript blocks). Suite now **199 tests**.
 
 ### 2026-08-14 — A2: local HTML dashboard (visual, offline, no server)
 - **`pocs/dashboard/` (15 tests) + `geo report` subcommand (4 tests).** Renders a saved GeoReport

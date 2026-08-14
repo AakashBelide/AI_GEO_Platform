@@ -30,8 +30,17 @@ fixture — no keys, no I/O.
   through `pocs/rigor.two_proportion_test`; the card prints
   `A vs B: distinguishable / NOT distinguishable (within noise)`, so the dashboard never
   implies a difference that is inside the noise.
+- **Findings & Recommendations (Task A3)** — the interpretation layer from `pocs/insights`,
+  placed right after the gap callout: plain-English findings (restated numbers) and hedged,
+  evidence-tied GEO recommendations (each names a concrete engine/domain/count).
 - **Methodology card** — fields + caveats rendered **verbatim** (incl. the Gemini
   grounding-redirect proxy caveat).
+- **Top cited domains per engine** — a compact per-engine table of the most-cited domains
+  with counts, highlighting the target domain where an engine cites it.
+- **Prompts used** — the exact prompt set, labelled by intent.
+- **Evidence / transcript** — per engine, a native `<details>`/`<summary>` block per prompt
+  (no JS) showing the prompt, the model's actual answer, and its citations (url · domain ·
+  position). Citation URLs appear as text in the body; the `<head>`/`<style>` stay asset-free.
 - **Notes.**
 
 ## Why it's honest
@@ -55,6 +64,11 @@ uv run pytest pocs/dashboard/ -q          # offline, no keys
 # render a saved JSON report into an HTML dashboard (default output under data/reports/)
 uv run python app/geo.py report --input data/reports/asana_2026-08-14.json \
     --output data/reports/asana_2026-08-14.html
+
+# enrich an older report with the evidence + interpretation layer from the fact store
+# (reconstructs prompts/transcript/top-domains + findings/recommendations; no engine re-called)
+uv run python app/geo.py report --input data/reports/asana_2026-08-14.json \
+    --store data/geo.sqlite --output data/reports/asana_2026-08-14.html
 ```
 
 ## Integrates with

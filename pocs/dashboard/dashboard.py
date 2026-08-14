@@ -439,6 +439,133 @@ def _methodology(r: dict) -> str:
     """
 
 
+def _findings(r: dict) -> str:
+    """Plain-English findings (from the insights layer) — restated numbers."""
+    items = r.get("findings") or []
+    if not items:
+        return ""
+    lis = "".join(f"<li>{_e(x)}</li>" for x in items)
+    return f"""
+    <section class="insight">
+      <h2>Findings <span class="hint">what the numbers say</span></h2>
+      <ul class="insight-list">{lis}</ul>
+    </section>
+    """
+
+
+def _recommendations(r: dict) -> str:
+    """GEO recommendations (from the insights layer) — hedged, evidence-tied."""
+    items = r.get("recommendations") or []
+    if not items:
+        return ""
+    lis = "".join(f"<li>{_e(x)}</li>" for x in items)
+    return f"""
+    <section class="insight">
+      <h2>Recommendations <span class="hint">directional hypotheses to test (not proven
+        levers)</span></h2>
+      <ul class="insight-list">{lis}</ul>
+    </section>
+    """
+
+
+def _prompts_used(r: dict) -> str:
+    """The prompt set that produced this report, with intent labels."""
+    prompts = r.get("prompts") or []
+    if not prompts:
+        return ""
+    lis = "".join(
+        f'<li><span class="pintent">{_e(p.get("intent", "—"))}</span>'
+        f'<span class="ptext">{_e(p.get("text", ""))}</span></li>'
+        for p in prompts
+    )
+    return f"""
+    <section>
+      <h2>Prompts used <span class="hint">the exact questions asked, per intent</span></h2>
+      <ol class="prompts-used">{lis}</ol>
+    </section>
+    """
+
+
+def _is_target(domain: str, target: str) -> bool:
+    d = domain.lower().lstrip(".")
+    return bool(target) and (d == target or d.endswith("." + target))
+
+
+def _top_domains(r: dict) -> str:
+    """Per-engine most-cited domains with counts (the 'what actually gets cited' view)."""
+    top = r.get("top_domains") or {}
+    target = str(r.get("target_domain") or "").lower().lstrip(".")
+    if not top or not any(top.values()):
+        return ""
+    blocks: list[str] = []
+    for engine, entries in top.items():
+        rows: list[str] = []
+        for entry in entries:
+            dom, cnt = str(entry[0]), int(entry[1])
+            cls = ' class="tdom-target"' if _is_target(dom, target) else ""
+            rows.append(
+                f'<tr{cls}><td>{_e(dom)}</td><td class="tdom-count">{_e(cnt)}</td></tr>'
+            )
+        body = "".join(rows) or '<tr><td class="muted" colspan="2">no citations</td></tr>'
+        blocks.append(
+            f'<div class="tdom-block"><h3>{_e(engine)}</h3>'
+            f'<table class="tdom"><tbody>{body}</tbody></table></div>'
+        )
+    tnote = (
+        f'<p class="caption">The target domain <b>{_e(target)}</b> is highlighted where an '
+        "engine cites it.</p>"
+        if target
+        else ""
+    )
+    return f"""
+    <section>
+      <h2>Top cited domains per engine <span class="hint">count of citations in this
+        run</span></h2>
+      <div class="tdom-grid">{''.join(blocks)}</div>
+      {tnote}
+    </section>
+    """
+
+
+def _transcript(r: dict) -> str:
+    """Evidence: per engine, a collapsible block per prompt (answer + citations). No JS."""
+    tr = r.get("transcript") or {}
+    if not tr:
+        return ""
+    blocks: list[str] = []
+    for engine, samples in tr.items():
+        details: list[str] = []
+        for s in samples or []:
+            cites = s.get("citations") or []
+            cite_items = "".join(
+                f'<li><span class="cpos">{_e(c.get("position"))}</span>'
+                f'<b>{_e(c.get("domain"))}</b>'
+                f'<span class="curl">{_e(c.get("url"))}</span></li>'
+                for c in cites
+            )
+            cite_block = (
+                f'<ol class="cites">{cite_items}</ol>'
+                if cite_items
+                else '<p class="muted">no citations for this answer</p>'
+            )
+            details.append(
+                f"<details><summary>{_e(s.get('prompt_text', ''))}</summary>"
+                f'<div class="answer">{_e(s.get("answer", ""))}</div>{cite_block}</details>'
+            )
+        blocks.append(
+            f'<div class="tblock"><h3>{_e(engine)}</h3>{"".join(details)}</div>'
+        )
+    return f"""
+    <section>
+      <h2>Evidence &middot; transcript <span class="hint">one representative answer per
+        prompt, with its citations</span></h2>
+      <p class="lead">Expand any prompt to read the model's actual answer and the exact
+      sources it cited (url &middot; domain &middot; position).</p>
+      {''.join(blocks)}
+    </section>
+    """
+
+
 def _notes(r: dict) -> str:
     notes = r.get("notes") or []
     if not notes:
@@ -528,6 +655,41 @@ table.access thead th {{ color: {MUTED}; font-size: 11px; text-transform: upperc
 .clab {{ font-weight: 600; font-size: 13px; margin-bottom: 4px; }}
 .caveats ul {{ margin: 4px 0; padding-left: 18px; color: {INK2}; font-size: 13.5px; }}
 svg.cibar {{ display: inline-block; vertical-align: middle; }}
+/* Insights (findings / recommendations) */
+.insight {{ background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 12px;
+  padding: 16px 20px; }}
+.insight-list {{ margin: 4px 0; padding-left: 20px; }}
+.insight-list li {{ margin: 7px 0; color: {INK}; }}
+/* Prompt list */
+.prompts-used {{ margin: 4px 0; padding-left: 22px; }}
+.prompts-used li {{ margin: 6px 0; }}
+.pintent {{ display: inline-block; min-width: 96px; margin-right: 8px; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .04em; color: {MUTED}; font-weight: 600; }}
+.ptext {{ color: {INK}; }}
+/* Cited-domain tables */
+.tdom-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; }}
+.tdom-block {{ border: 1px solid {GRID}; border-radius: 10px; padding: 10px 12px;
+  background: {SURFACE}; }}
+.tdom-block h3 {{ margin: 0 0 6px; font-size: 13px; }}
+table.tdom td {{ padding: 3px 6px; font-size: 13px; border-bottom: 1px solid {GRID}; }}
+.tdom-count {{ text-align: right; font-variant-numeric: tabular-nums; color: {INK2}; }}
+tr.tdom-target td {{ background: #e4f3e4; font-weight: 600; }}
+/* Evidence / transcript */
+.tblock {{ margin: 14px 0; }}
+.tblock h3 {{ margin: 0 0 6px; font-size: 15px; }}
+details {{ border: 1px solid {GRID}; border-radius: 8px; margin: 6px 0; background: {SURFACE};
+  padding: 4px 12px; }}
+details[open] {{ background: {PLANE}; }}
+summary {{ cursor: pointer; font-weight: 600; padding: 6px 0; color: {INK}; }}
+.answer {{ white-space: pre-wrap; color: {INK2}; font-size: 13.5px; margin: 8px 0;
+  padding: 8px 10px; border-left: 3px solid {AXIS}; background: {PLANE}; }}
+.cites {{ margin: 6px 0; padding-left: 20px; }}
+.cites li {{ margin: 3px 0; font-size: 12.5px; }}
+.cpos {{ display: inline-block; min-width: 20px; color: {MUTED};
+  font-variant-numeric: tabular-nums; }}
+.cites b {{ color: {INK}; margin-right: 6px; }}
+.curl {{ color: {SERIES}; word-break: break-all; margin-left: 6px; }}
 footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid {BORDER};
   color: {MUTED}; font-size: 12px; }}
 """
@@ -546,9 +708,14 @@ def render_dashboard(report: dict) -> str:
             _prompt_set(report),
             _metrics_table(report),
             _gap_callout(report),
+            _findings(report),
+            _recommendations(report),
             _reconciliation(report),
             _distinguishability(report),
             _methodology(report),
+            _top_domains(report),
+            _prompts_used(report),
+            _transcript(report),
             _notes(report),
         ]
     )

@@ -257,6 +257,10 @@ X1 testing / X2 lint / X3 docs run throughout.
 > every rate, synthetic-run banner, mention-vs-citation gap callout, cross-engine
 > two-proportion-test distinguishability verdicts, verbatim methodology card. Real artifact at
 > `data/reports/asana_2026-08-14.html`. Drift chart deferred (needs two dated snapshots).
+> **Extended:** evidence drill-down (prompts + per-engine answer/citation transcript via `<details>`,
+> top-cited-domains table) reconstructed from the fact store (`app/store_reader.py`), plus an
+> interpretation layer `pocs/insights/` (evidence-tied findings + hedged GEO recommendations, reusing
+> `two_proportion_test`). `geo report --store <db>` enriches a saved report; pipeline populates it natively.
 - **Depends on:** A1. Tech TBD (start with static HTML/matplotlib; optional Next/React later).
 - **Subtasks:** per-brand citation frequency **with Wilson CIs**; SoV by engine; cross-engine
   overlap chart; drift chart; "not statistically distinguishable" callouts.

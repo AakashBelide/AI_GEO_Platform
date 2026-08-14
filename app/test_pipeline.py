@@ -58,6 +58,24 @@ def test_engine_base_rates_differ_across_engines():
     assert len(set(pts.values())) > 1
 
 
+def test_report_populates_evidence_and_interpretation_layer():
+    rep = run_pipeline(CONFIG, generated_utc="t")
+    # prompts reconstructed with intent labels
+    assert len(rep.prompts) == 20
+    assert set(rep.prompts[0]) == {"text", "intent", "category"}
+    # transcript keyed by engine, one sample per prompt, with citations
+    assert set(rep.transcript) == set(rep.per_engine_metrics)
+    sample = rep.transcript["openai"][0]
+    assert set(sample) == {"prompt_text", "answer", "citations"}
+    assert len(sample["answer"]) <= 700
+    # top cited domains per engine, findings + recommendations non-empty
+    assert rep.top_domains and all(rep.top_domains.values())
+    assert rep.findings and rep.recommendations
+    # a dry-run is loudly flagged as illustrative in both lists
+    assert rep.findings[0].startswith("ILLUSTRATIVE ONLY")
+    assert rep.recommendations[0].startswith("ILLUSTRATIVE ONLY")
+
+
 def test_single_engine_skips_reconciliation():
     cfg = GeoConfig(brand="X", category="c", engines=("openai",),
                     target_domain="x.example", n_prompts=10, repeats=5)
@@ -169,3 +187,50 @@ def test_cmd_report_default_output_path(tmp_path):
     )
     assert args.func(args) == 0
     assert (tmp_path / (json_path.stem + ".html")).exists()
+
+
+def test_parser_report_store_flag_wiring():
+    args = build_parser().parse_args(
+        ["report", "--input", "r.json", "--store", "data/geo.sqlite"]
+    )
+    assert args.store == "data/geo.sqlite"
+
+
+def test_cmd_report_with_store_enriches_evidence(tmp_path):
+    """--store rebuilds the evidence + interpretation layer from the fact store (no spend)."""
+    import _paths  # noqa: F401
+    from factstore import FactStore
+
+    # a minimal JSON report lacking the raw sections, mirroring an older artifact
+    report_json = {
+        "brand": "Asana", "category": "pm", "mode": "live", "generated_utc": "t",
+        "prompt_set": {}, "reconciliation": {},
+        "per_engine_metrics": {
+            "openai": {"n_runs": 1,
+                       "mention": {"point": 0.9, "lo": 0.5, "hi": 1.0, "n": 1},
+                       "citation": {"point": 0.0, "lo": 0.0, "hi": 0.8, "n": 1},
+                       "share_of_voice": {"point": 0.0, "lo": 0.0, "hi": 0.0, "n": 1}},
+        },
+    }
+    json_path = tmp_path / "asana.json"
+    json_path.write_text(json.dumps(report_json))
+
+    db = str(tmp_path / "geo.sqlite")
+    s = FactStore(db)
+    pid = s.add_prompt("best pm software?", intent="informational", category="pm")
+    rid = s.add_run(pid, engine="openai", model="gpt-4o-mini", run_index=0,
+                    answer_text="Asana is popular.")
+    s.add_citation(rid, cited_url="https://techradar.com/best", domain="techradar.com",
+                   position=1, is_target_brand=False)
+    s.close()
+
+    out_path = tmp_path / "asana.html"
+    args = build_parser().parse_args(
+        ["report", "--input", str(json_path), "--store", db, "--output", str(out_path)]
+    )
+    assert args.func(args) == 0
+    html = out_path.read_text()
+    assert "best pm software?" in html            # prompt reconstructed
+    assert "techradar.com" in html                # top cited domain
+    assert "<details>" in html                    # transcript block
+    assert "Findings" in html and "Recommendations" in html

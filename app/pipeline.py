@@ -22,6 +22,8 @@ from datetime import UTC, datetime
 
 import _paths  # noqa: F401  (side effect: put pocs/* on sys.path)
 from connectors import ENGINES
+from insights import generate_findings, generate_recommendations
+from insights import top_domains as compute_top_domains
 from metrics import RunRecord, compute_brand_metrics
 from onboarding import BrandProfile, build_prompt_set
 from reconcile import reconcile
@@ -64,11 +66,28 @@ def _est(e) -> dict:
 # --------------------------------------------------------------------------- #
 # Run production
 # --------------------------------------------------------------------------- #
-def _synthetic_runs(config: GeoConfig, prompts) -> dict[str, list[RunRecord]]:
+_ANSWER_TRUNCATE = 700
+_MAX_CITATIONS_PER_SAMPLE = 12
+# A run producer returns: per-engine RunRecords, a transcript (one representative sample
+# per prompt per engine), and every cited domain per engine (for top_domains).
+RunProduction = tuple[dict[str, list[RunRecord]], dict[str, list], dict[str, list[str]]]
+
+
+def _sample(prompt_text: str, answer: str, citations: list[dict]) -> dict:
+    """One transcript sample: the prompt, a truncated answer, and its capped citations."""
+    return {
+        "prompt_text": prompt_text,
+        "answer": (answer or "")[:_ANSWER_TRUNCATE],
+        "citations": citations[:_MAX_CITATIONS_PER_SAMPLE],
+    }
+
+
+def _synthetic_runs(config: GeoConfig, prompts) -> RunProduction:
     """Deterministic fabricated answers per engine — reproducible, $0, offline.
 
     Each engine gets a distinct base citation propensity so the reconciliation has real
     cross-engine structure to report. These are NOT real measurements (labeled in the report).
+    Also returns a transcript + per-engine cited domains for the evidence/insights layer.
     """
     rng = random.Random(config.seed)
     target = config.target_domain or "brand.example"
@@ -79,8 +98,12 @@ def _synthetic_runs(config: GeoConfig, prompts) -> dict[str, list[RunRecord]]:
     # (not a flat 1.0) and the divergence explainer has structure to find.
     engine_sources = {e: [f"{e}-src{k}.example" for k in range(1, 5)] for e in config.engines}
     runs: dict[str, list[RunRecord]] = {}
+    transcript: dict[str, list] = {}
+    domains_by_engine: dict[str, list[str]] = {}
     for engine in config.engines:
         recs: list[RunRecord] = []
+        samples: list[dict] = []
+        all_domains: list[str] = []
         # bias the second engine toward Reddit so divergence fires in the demo
         reddit_bias = 0.9 if engine == config.engines[min(1, len(config.engines) - 1)] else 0.05
         for pid in range(len(prompts)):
@@ -99,13 +122,26 @@ def _synthetic_runs(config: GeoConfig, prompts) -> dict[str, list[RunRecord]]:
                 names = rng.random() < base_rate[engine]
                 text = f"{config.brand} is a strong option." if names else "Consider others."
                 recs.append(RunRecord(pid, engine, text, tuple(cites)))
+                all_domains.extend(cites)
+                if len(samples) == pid:  # first run of this prompt -> representative sample
+                    citations = [{"url": f"https://{d}", "domain": d, "position": i}
+                                 for i, d in enumerate(cites, start=1)]
+                    samples.append(_sample(prompts[pid].text, text, citations))
         runs[engine] = recs
-    return runs
+        transcript[engine] = samples
+        domains_by_engine[engine] = all_domains
+    return runs, transcript, domains_by_engine
 
 
-def _live_runs(config: GeoConfig, prompts, ledger, store=None) -> dict[str, list[RunRecord]]:
-    """Real engine calls via the budget-guarded connectors; persisted to the fact store."""
+def _live_runs(config: GeoConfig, prompts, ledger, store=None) -> RunProduction:
+    """Real engine calls via the budget-guarded connectors; persisted to the fact store.
+
+    Also captures the raw evidence (a representative sample per prompt with full
+    url/domain/position citations, plus every cited domain) for the insights layer.
+    """
     runs: dict[str, list[RunRecord]] = {}
+    transcript: dict[str, list] = {}
+    domains_by_engine: dict[str, list[str]] = {}
     prompt_ids: dict[int, int] = {}
     if store is not None:
         for pid, p in enumerate(prompts):
@@ -115,6 +151,8 @@ def _live_runs(config: GeoConfig, prompts, ledger, store=None) -> dict[str, list
         cls = ENGINES[engine]
         eng = cls(engine, DEFAULT_MODELS[engine], ledger)
         recs: list[RunRecord] = []
+        samples: list[dict] = []
+        all_domains: list[str] = []
         for pid, p in enumerate(prompts):
             for rep in range(config.repeats):
                 try:
@@ -122,6 +160,11 @@ def _live_runs(config: GeoConfig, prompts, ledger, store=None) -> dict[str, list
                 except Exception:  # noqa: BLE001 - budget stop / transient; keep partial data
                     break
                 recs.append(RunRecord(pid, engine, resp.answer_text, tuple(resp.domains)))
+                all_domains.extend(d for d in resp.domains if d)
+                if rep == 0:  # representative sample = first repeat of the prompt
+                    citations = [{"url": c.url, "domain": c.domain, "position": c.position}
+                                 for c in resp.citations]
+                    samples.append(_sample(p.text, resp.answer_text, citations))
                 if store is not None:
                     rid = store.add_run(prompt_ids[pid], engine=engine, model=eng.model,
                                         run_index=rep, answer_text=resp.answer_text,
@@ -134,7 +177,9 @@ def _live_runs(config: GeoConfig, prompts, ledger, store=None) -> dict[str, list
                                            position=c.position, is_target_brand=is_t)
         if recs:
             runs[engine] = recs
-    return runs
+            transcript[engine] = samples
+            domains_by_engine[engine] = all_domains
+    return runs, transcript, domains_by_engine
 
 
 # --------------------------------------------------------------------------- #
@@ -151,6 +196,12 @@ class GeoReport:
     reconciliation: dict
     spend: dict = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    # Evidence + interpretation layer (Task A3)
+    prompts: list = field(default_factory=list)          # [{text, intent, category}]
+    transcript: dict = field(default_factory=dict)       # engine -> [{prompt_text, answer, ...}]
+    top_domains: dict = field(default_factory=dict)      # engine -> [[domain, count], ...]
+    findings: list = field(default_factory=list)         # factual, restated numbers
+    recommendations: list = field(default_factory=list)  # hedged, evidence-tied GEO actions
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -168,13 +219,15 @@ def run_pipeline(config: GeoConfig, *, ledger=None, store=None,
     if config.live:
         if ledger is None:
             raise ValueError("live mode requires a CostLedger")
-        runs = _live_runs(config, ps.prompts, ledger, store)
+        runs, transcript, domains_by_engine = _live_runs(config, ps.prompts, ledger, store)
         mode = "live"
     else:
-        runs = _synthetic_runs(config, ps.prompts)
+        runs, transcript, domains_by_engine = _synthetic_runs(config, ps.prompts)
         mode = "dry-run (synthetic)"
 
     runs = {e: r for e, r in runs.items() if r}
+    transcript = {e: transcript[e] for e in runs if e in transcript}
+    domains_by_engine = {e: domains_by_engine.get(e, []) for e in runs}
     aliases = profile.all_names()
     target = config.target_domains()
     comps = list(config.competitor_domains)
@@ -213,9 +266,21 @@ def run_pipeline(config: GeoConfig, *, ledger=None, store=None,
     if ledger is not None:
         spend = {e: {"spent": ledger.spent(e), "cap": ledger.cap_usd} for e in config.engines}
 
-    return GeoReport(
+    prompts_list = [{"text": p.text, "intent": p.intent, "category": p.category}
+                    for p in ps.prompts]
+    top_dom = compute_top_domains(domains_by_engine)
+
+    report = GeoReport(
         brand=config.brand, category=config.category, mode=mode, generated_utc=ts,
         prompt_set={"count": len(ps.prompts), "intents": ps.intents,
                     "skew": asdict(ps.skew)},
         per_engine_metrics=per_engine, reconciliation=recon, spend=spend, notes=notes,
+        prompts=prompts_list, transcript=transcript, top_domains=top_dom,
     )
+
+    # Interpretation layer: findings/recommendations derived from the assembled report.
+    insight_view = report.to_dict()
+    insight_view["target_domain"] = config.target_domain
+    report.findings = generate_findings(insight_view)
+    report.recommendations = generate_recommendations(insight_view)
+    return report

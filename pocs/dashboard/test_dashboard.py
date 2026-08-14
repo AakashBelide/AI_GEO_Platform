@@ -79,6 +79,41 @@ def _report() -> dict:
             "perplexity": {"spent": 0.30, "cap": 2.0},
         },
         "notes": ["Locale-sensitive; holds only for the stated locale."],
+        "target_domain": "asana.com",
+        "prompts": [
+            {"text": "What is the best project management software?",
+             "intent": "informational", "category": "pm"},
+            {"text": "Is Asana good for small teams?",
+             "intent": "commercial", "category": "pm"},
+        ],
+        "top_domains": {
+            "openai": [["techradar.com", 14], ["capterra.com", 8]],
+            "perplexity": [["reddit.com", 70], ["asana.com", 30]],
+        },
+        "transcript": {
+            "openai": [
+                {"prompt_text": "What is the best project management software?",
+                 "answer": "The best options include Asana, Trello and Monday.",
+                 "citations": [
+                     {"url": "https://www.techradar.com/best", "domain": "techradar.com",
+                      "position": 1}]},
+            ],
+            "perplexity": [
+                {"prompt_text": "Is Asana good for small teams?",
+                 "answer": "Yes — Asana is widely recommended for small teams.",
+                 "citations": [
+                     {"url": "https://asana.com/product", "domain": "asana.com",
+                      "position": 1}]},
+            ],
+        },
+        "findings": [
+            "openai mentions Asana in 82% of answers but cites asana.com in 0% of them "
+            "— it recommends the brand without linking it.",
+        ],
+        "recommendations": [
+            "openai never cites asana.com but does cite techradar.com (14) — pursue "
+            "presence there (PR & listings, not on-site SEO).",
+        ],
     }
 
 
@@ -104,9 +139,11 @@ def test_render_is_standalone_html_document():
     html = render_dashboard(_report())
     assert html.lstrip().startswith("<!DOCTYPE html>")
     assert "<svg" in html
-    # self-contained: no external asset links
-    assert "http://" not in html
-    assert "https://" not in html
+    # self-contained: no external asset links in the <head>/<style> (the only place a
+    # network fetch could be triggered). Citation URLs shown as text in the <body> are fine.
+    head = html[: html.index("</head>")]
+    assert "http://" not in head
+    assert "https://" not in head
 
 
 def test_render_shows_brand_and_category():
@@ -168,6 +205,55 @@ def test_methodology_caveats_rendered_verbatim():
 def test_notes_section_rendered():
     html = render_dashboard(_report())
     assert "Locale-sensitive" in html
+
+
+# --- evidence + interpretation layer (Task A3) ------------------------------ #
+def test_findings_section_renders_the_gap_finding():
+    html = render_dashboard(_report())
+    assert "Findings" in html
+    assert "mentions Asana in 82% of answers but cites asana.com in 0%" in html
+
+
+def test_recommendations_section_renders_named_domain():
+    html = render_dashboard(_report())
+    assert "Recommendations" in html
+    assert "techradar.com" in html
+    assert "not on-site SEO" in html
+
+
+def test_prompts_used_section_lists_prompts_with_intent():
+    html = render_dashboard(_report())
+    assert "Prompts used" in html
+    assert "What is the best project management software?" in html
+    assert "commercial" in html  # an intent label
+
+
+def test_top_domains_section_shows_domain_with_count_and_highlights_target():
+    html = render_dashboard(_report())
+    assert "Top cited domains per engine" in html
+    assert "techradar.com" in html and ">14<" in html   # a domain with its count
+    assert "reddit.com" in html and ">70<" in html
+    assert "tdom-target" in html                          # target (asana.com) highlighted
+
+
+def test_transcript_section_has_details_block_with_answer_and_citation_url():
+    html = render_dashboard(_report())
+    assert "Evidence" in html
+    assert "<details>" in html and "<summary>" in html
+    assert "The best options include Asana" in html      # a real answer
+    assert "https://www.techradar.com/best" in html       # a citation URL (as text)
+
+
+def test_evidence_sections_absent_when_data_missing():
+    # a report without the A3 fields still renders (older reports)
+    rep = _report()
+    for key in ("findings", "recommendations", "prompts", "top_domains", "transcript"):
+        rep.pop(key, None)
+    html = render_dashboard(rep)
+    assert "<!DOCTYPE html>" in html
+    assert "<details>" not in html                    # no transcript
+    assert "Top cited domains per engine" not in html  # section heading absent
+    assert "Prompts used" not in html
 
 
 # --- edge case: empty / missing reconciliation ------------------------------ #

@@ -49,6 +49,21 @@ Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANT
 
 ## 5. Run log & findings
 
+### 2026-08-14 — First full LIVE brand run (Asana) — the headline finding
+Ran the whole pipeline live: `geo run --brand Asana … --live`, 10 prompts × 5 repeats × 4 engines
+(200 calls). **Cost ≈ $2.55** (openai $1.28 · anthropic $0.90 · perplexity $0.27 · gemini $0.09 —
+all ≪ $2 cap; cumulative ≈ $2.84).
+- **Mention ≠ citation, and it's engine-specific (the money finding).** OpenAI & Anthropic
+  **mentioned** Asana ~80% of answers but cited **asana.com in 0/50 runs each** — they linked review
+  sites (techradar, capterra, thedigitalprojectmanager). Perplexity & Gemini *did* link asana.com
+  (30 and 25 times; citation rate 0.40 and 0.14). A single blended "visibility score" would hide
+  that Asana is *recommended-but-never-linked* on OpenAI/Anthropic and *linked* on Perplexity/Gemini.
+- **Cross-engine citation overlap = 12.7%** — third independent corroboration of ~11%, now on a real
+  brand.
+- **SoV still degenerate** even at 50 runs/engine (only n=1–4 prompts per engine surfaced the brand
+  universe; CIs span [0.25,1.0] or [0,0]) — flagged, not reported. Real SoV needs many more prompts.
+- Every rate carries a Wilson CI; report persisted to `data/geo.sqlite` + `data/reports/` (gitignored).
+
 ### 2026-08-14 — A1: end-to-end `geo run` CLI built (offline dry-run default)
 - **`app/` (16 tests).** Wires the passing POCs into one command: brand → prompts (R1) → runs
   (synthetic dry-run / live connectors) → fact store (F2, live) → metrics with CIs (R2/O1) →
@@ -136,7 +151,7 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
 - Note: Perplexity returned Spanish-language results/sources for this session → **locale/geo
   affects the cited source set.** The prompt set (R1) should pin locale explicitly.
 
-**Spend so far (of $2.00 each):** OpenAI ~$0.025 · Gemini ~$0.0001 · Anthropic ~$0.034 · Perplexity ~$0.006.
+**Spend so far (of $2.00 each), cumulative:** OpenAI ~$1.41 · Anthropic ~$1.03 · Perplexity ~$0.30 · Gemini ~$0.10 (total ≈ $2.84 of $8.00; all engines still under their $2 caps, mostly from the live Asana run).
 
 ### Learnings
 1. **Citation extraction depends on the model actually searching.** Trivial/evergreen prompts
@@ -157,7 +172,9 @@ Prompt (forces search): _"Search the web: best AI search visibility (GEO) tracki
 - ~~O3 (cross-engine reconciliation)~~ — **done 2026-08-13** (13 tests + live run; overlap ≈9.6%
   measured, Gemini redirect artifact found).
 - ~~Resolve Gemini grounding redirects to real domains~~ — **done** (via `web.title`; now in overlap).
-- Follow-ups: a multi-repeat O3 run for meaningful SoV; O2 (causal before/after) still to build.
+- ~~Multi-repeat live run~~ — **done 2026-08-14** (Asana, 10×5; mention≠citation finding, overlap
+  12.7%). SoV still needs *more prompts* (not more repeats) to be non-degenerate.
+- Remaining: O2 (causal before/after); A2 dashboard to visualize the JSON reports.
 - Buildable now with no keys: app integration (A1) of the passing POCs.
 
 ## 7. How to reproduce

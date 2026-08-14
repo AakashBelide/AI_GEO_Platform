@@ -36,9 +36,13 @@ _Last updated: 2026-08-14._
   corroborating the ~11% we had only borrowed. Getting there surfaced (and we fixed) a real
   artifact: Gemini's grounding URLs are redirect wrappers whose real domain lives in `web.title`
   (O-7); before the fix Gemini looked like it cited a single host.
-- **Total live spend to date ≈ $0.30** (of $8.00 across providers). We still have **not** run a
-  full multi-*repeat* measurement on a real brand (the O3 run was 1 repeat, so per-engine SoV is
-  uninformative at that n) — brand-level competitive rankings remain explicitly deferred.
+- **We have now run the full pipeline live on a real brand.** Asana, 10 prompts × 5 repeats × 4
+  engines ($2.55), surfaced the sharpest finding yet: **OpenAI and Anthropic mention Asana ~80% of
+  the time but cite asana.com 0/50 times** (they link review sites); Perplexity/Gemini do link it
+  (O-8). Cross-engine overlap came in at **12.7%** — a third corroboration of ~11%.
+- **Total live spend to date ≈ $2.84** (of $8.00 across providers). Per-engine **SoV is still not
+  reliably measurable** even at 50 runs/engine (too few prompts surface the brand universe; CIs are
+  degenerate) — the tool flags this rather than faking a number, which is itself the thesis.
 
 ---
 
@@ -114,6 +118,24 @@ Unique domains per engine: perplexity 57 · gemini 52 · openai 32 · anthropic 
 sample is uninformative (n=0–1 prompts per engine hit the brand universe; CIs are degenerate/[0,1])
 — correctly flagged rather than reported as fact.
 
+### 2.5 First full LIVE brand run (A1 pipeline, real data) — Asana
+Source: `uv run python app/geo.py run --brand Asana … --live` (10 prompts × 5 repeats × 4 engines
+= 200 calls), 2026-08-14 (§Reproduction R-6). **Run cost ≈ $2.55** (openai $1.28 · anthropic $0.90
+· perplexity $0.27 · gemini $0.09 — every provider ≪ its $2 cap; cumulative live spend now ≈ $2.84).
+
+| Engine | Mention rate (95% CI) | Cites **asana.com** (95% CI) | asana.com citations | Top cited domains |
+|---|---|---|---:|---|
+| openai | 0.82 [0.69, 0.90] | **0.00 [0.00, 0.07]** | 0 / 86 | techradar, kanbanchi, taskrhino |
+| anthropic | 0.80 [0.67, 0.89] | **0.00 [0.00, 0.07]** | 0 / 197 | thedigitalprojectmanager, paymoapp, capterra |
+| perplexity | 0.74 [0.60, 0.84] | 0.40 [0.28, 0.54] | 30 / 945 | reddit(70), thedigitalprojectmanager, wrike |
+| gemini | 0.60 [0.46, 0.72] | 0.14 [0.07, 0.26] | 25 / 339 | project-management.com, asana.com(25), wrike |
+
+- **Cross-engine citation overlap = 0.127 (12.7%)** — a *third* independent corroboration of ~11%,
+  now on a real brand.
+- **Per-engine SoV was still degenerate** (n=1–4 prompts per engine hit the brand universe; CIs
+  span [0.25, 1.00] or collapse to [0,0]) — the pipeline flags it rather than reporting a number.
+  Even 50 runs/engine is too few for SoV here; a real SoV needs many more category-surfacing prompts.
+
 ---
 
 ## 3. Observations
@@ -164,6 +186,16 @@ domains** and restores its overlap with the other engines (gemini↔perplexity 0
 do." *Evidence: R-4 + R-5; cached payloads under `data/cache/gemini/`.*
 
 ---
+
+**O-8 — Mention ≠ citation, and citing the brand's *own domain* is engine-specific.**
+**[our measurement, real brand]** On the live Asana run, OpenAI and Anthropic **mentioned** Asana
+in ~80% of answers but cited **asana.com in 0 of 50 runs each** — they pointed to review/aggregator
+sites (techradar, capterra, thedigitalprojectmanager) instead. Perplexity and Gemini *did* link
+asana.com (30 and 25 times). So a brand's "AI visibility" is not one number: on OpenAI/Anthropic
+Asana is *recommended but never linked*, on Perplexity/Gemini it is *linked*. Any tool that reports
+a single blended "visibility score" collapses two things (does the model talk about you vs. does it
+send a click to your domain) that a real brand experiences very differently per engine. *Evidence:
+R-6; fact store `data/geo.sqlite`.*
 
 ## 4. Analysis (what the observations mean)
 
@@ -235,7 +267,9 @@ honesty story; the CI is the output-side half.
 | Cross-engine overlap ≈ 10.6% (all 4 engines) | **Substantiated (ours)** — O3 live run + Gemini fix (R-4, R-5); corroborates the borrowed ~11%. |
 | Gemini domains resolved via web.title (redirect not followed) | **Substantiated (ours)** — O-7 fix; Gemini now folded into overlap. Domains are as Gemini reports them, not verified against the live redirect target. |
 | 40–60% monthly citation drift | **Not ours** — external; `citation_drift` can measure it once we have two dated snapshots. |
-| Real-brand competitive ranking | **Not attempted** — needs a full live run; out of scope until then. |
+| Mention ≠ citation; brand-domain citation is engine-specific | **Substantiated (ours)** — live Asana run (O-8, R-6): OpenAI/Anthropic cite asana.com 0/50; Perplexity/Gemini link it. |
+| Real-brand *mention & citation* rates with CIs | **Substantiated (ours)** — live Asana run (R-6). |
+| Real-brand *Share of Voice* ranking | **Not yet** — even 50 runs/engine gives degenerate SoV CIs; needs many more category-surfacing prompts. Flagged, not reported. |
 | Sentiment numbers | **Gated** — reported only after κ ≥ 0.6 on a gold set (not yet collected). |
 
 ---
@@ -260,6 +294,12 @@ uv run python pocs/reconcile/reconcile_live.py
 
 # R-5  re-derive overlap from CACHED payloads with the Gemini fix (offline, $0)
 uv run python pocs/reconcile/recompute_from_cache.py
+
+# R-6  full LIVE brand run through the geo CLI (spends ~$2.5, budget-guarded)
+uv run python app/geo.py run --brand "Asana" --category "project management software" \
+    --aliases Asana --competitors "Monday.com,Trello,ClickUp" \
+    --target-domain asana.com --competitor-domains monday.com,trello.com,clickup.com \
+    --prompts 10 --repeats 5 --live
 
 uv run ruff check .      # lint clean
 ```

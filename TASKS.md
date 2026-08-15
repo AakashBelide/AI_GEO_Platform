@@ -30,7 +30,8 @@ X1 testing / X2 lint / X3 docs run throughout.
 
 ## MILESTONE 0 — Foundation (F)
 
-### F1 ☐ Python project + tooling baseline
+### F1 ☑ Python project + tooling baseline
+> **Done:** `pyproject.toml` (uv), pytest + ruff configured; `uv run pytest` green.
 - **Why:** every POC needs a reproducible env and a test runner.
 - **Prerequisites:** none (uv, Python 3.13 already installed).
 - **Subtasks:**
@@ -42,7 +43,9 @@ X1 testing / X2 lint / X3 docs run throughout.
 - **Deliverable:** `pyproject.toml`, `uv.lock`, green `pytest`.
 - **Done when:** `uv run pytest` passes locally.
 
-### F2 ☐ Fact-store schema (SQLite, append-only)
+### F2 ☑ Fact-store schema (SQLite, append-only)
+> **Done:** `pocs/factstore/` (7 tests) — append-only prompts/runs/citations/mentions/
+> content_scores; used live by `app/geo.py --live` (persists to `data/geo.sqlite`).
 - **Why:** variance/drift require immutable per-run rows (RESEARCH.md §3.4).
 - **Depends on:** F1.
 - **Prerequisites:** decide SQLite (chosen) over Postgres for local simplicity.
@@ -55,7 +58,9 @@ X1 testing / X2 lint / X3 docs run throughout.
 - **Deliverable:** `pocs/factstore/` with schema + tests.
 - **Done when:** round-trip tests pass; DB file lands in gitignored `data/`.
 
-### F3 ☐ Engine connector layer (adapters + normalization)
+### F3 ☑ Engine connector layer (adapters + normalization)
+> **Done:** `pocs/connectors/` (25 tests) — 4 live engines behind one interface + budget
+> guard ($2/provider); live-verified. Gemini redirect-domain fix (O-7) included.
 - **Why:** the atomic core of every GEO product; must be uniform + ToS-clean.
 - **Depends on:** F1, F2.
 - **Prerequisites:** **API keys in `.env`** (OpenAI, Perplexity, Gemini). *Blocked on user
@@ -142,7 +147,10 @@ X1 testing / X2 lint / X3 docs run throughout.
 
 ## MILESTONE 2 — Open lanes (O) — from §7.2, the differentiators
 
-### O1 ☐ Statistical rigor / uncertainty reporting  ⭐ HEADLINE FEATURE
+### O1 ☑ Statistical rigor / uncertainty reporting  ⭐ HEADLINE FEATURE
+> **Done:** `pocs/rigor/` (22 tests) — Wilson CIs, cluster-bootstrap SoV, two-proportion
+> distinguishability test, variance components + budget advice, citation drift. Reused
+> everywhere (metrics, reconcile, dashboard, insights).
 - **Why:** **zero of ~28 competitors report confidence** (§7.2 #1). Cheapest to build,
   literally uncontested, corroborated by Digiday + academic 5–7pp CIs. This is the thesis.
 - **Depends on:** R2 (needs metric samples). Can prototype on synthetic data before F3 keys.
@@ -205,7 +213,10 @@ X1 testing / X2 lint / X3 docs run throughout.
 
 ## MILESTONE 3 — Crawler (C) — from §7.3 "try it locally, safely"
 
-### C1 ☐ Whole-site crawler + AI-readability audit (Lumar/Scrunch-style, small scale)
+### C1 ☑ Whole-site crawler + AI-readability audit (Lumar/Scrunch-style, small scale)
+> **Done:** `pocs/crawler/` (12 tests) — robots-respecting, rate-limited, sandbox-only
+> crawler + AI-readability audit (schema/JSON-LD, headings, extractability). Not yet wired
+> into the app pipeline (standalone POC).
 - **Why:** §7.3 — attempt site-side crawling/rendering/technical audit locally to learn the
   shape of the problem. Explicitly a *learning* task, not a production crawler.
 - **Depends on:** F1 (independent of the engine work; can run in parallel).

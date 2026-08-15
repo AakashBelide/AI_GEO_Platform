@@ -172,7 +172,13 @@ X1 testing / X2 lint / X3 docs run throughout.
 - **Done when:** given a sample of runs, emits CIs, variance breakdown, budget advice,
   and pairwise significance verdicts — all tested on synthetic data.
 
-### O2 ☐ Causal attribution (controlled before/after)
+### O2 ☑ Causal attribution (controlled before/after)
+> **Done (POC):** `pocs/causal/` (10 tests) — difference-in-differences with a holdout control
+> nets out background drift; reports causal uplift with a cluster-bootstrap CI + significance
+> (CI excludes 0), alongside the naive delta + measured drift for contrast. `demo.py` shows the
+> drift trap (a drift-only experiment reads +0.11 naive but DiD correctly says "not significant").
+> Validated offline on simulated known-effect+known-drift data. Live before/after CLI integration
+> is future work (the estimator is the O2 "done when" bar).
 - **Why:** no tool proves an edit *caused* a visibility change (§7.2 #2). Princeton method,
   scaled down.
 - **Depends on:** F3, R2, O1 (CIs to judge significance), C1 (to fetch/edit page content).
@@ -281,10 +287,18 @@ X1 testing / X2 lint / X3 docs run throughout.
   overlap chart; drift chart; "not statistically distinguishable" callouts.
 - **Done when:** a local report renders the honesty-first visuals (CIs everywhere).
 
-### A3 ☐ Attribution notes (GA4 regex channel group) — documentation-only for now
+### A3 ☑ Attribution notes (GA4 regex channel group) — documentation-only
+> **Done:** `docs/GA4_ATTRIBUTION.md` — the method for detecting AI-assistant referral traffic in
+> GA4 (custom channel group + source regex), how to cross-reference it with the supply-side
+> citation data, and honest limits (dark/Direct traffic ⇒ lower bound; correlation not causation).
+> No code (local-only, no live GA4).
 - **Depends on:** A1. No live GA4 (local-only); document the method (RESEARCH §4.3).
 
-### A4 ☐ End-to-end demo run + write-up
+### A4 ☑ End-to-end demo run + write-up
+> **Done:** the live Asana run (10×5×4, $2.55) + `docs/DEMO_WRITEUP.md` — a self-contained
+> narrative of the platform end-to-end and its headline finding (mention≠citation; 12.7% overlap;
+> SoV not measurable at this n), with reproduction steps and the honesty caveats. Full evidence in
+> `docs/OBSERVATIONS_AND_ANALYSIS.md`.
 - **Depends on:** A1–A2. Produce the "single-run scores aren't reproducible; here are the CIs"
   finding on real data (RESEARCH §5.2).
 

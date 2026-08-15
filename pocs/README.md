@@ -20,9 +20,9 @@ mocked/replayed; crawler uses saved fixtures).
 | `reconcile/` | O3 — cross-engine reconciliation | No (offline); live runner optional | ☑ 13 tests + live-verified |
 | `dashboard/` | A2 — GeoReport → dark Tailwind+D3 dashboard | No (render); CDN to view | ☑ 24 tests |
 | `insights/` | A2 — findings + GEO recommendations (evidence-tied) | No | ☑ 20 tests |
-| `causal/` | O2 — controlled before/after attribution | Yes | ☐ |
+| `causal/` | O2 — controlled before/after attribution (DiD + holdout) | No (synthetic) | ☑ 10 tests |
 
-**202 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
+**212 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
 `../ANALYSIS_REPORT.md` for the running log of decisions, costs, and live findings.
 Every suite runs fully offline; live engine calls happen only in `connectors/smoke.py`
 under the $2/provider budget guard.

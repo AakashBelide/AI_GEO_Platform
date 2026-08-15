@@ -28,8 +28,9 @@ plan in `TASKS.md`.
 | End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 20 | No (offline); `--live` optional |
 | Dark dashboard (Tailwind+D3: dumbbell gap, CI dot-plots, heatmap, transcript) | A2 | `pocs/dashboard/` | 24 | No |
 | Interpretation layer: findings + GEO recommendations (evidence-tied) | A2 | `pocs/insights/` | 20 | No |
+| Causal attribution (difference-in-differences + holdout control) | O2 | `pocs/causal/` | 10 | No |
 
-**Total: 202 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 212 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -50,6 +51,21 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-14 — O2 (causal) + A3/A4 docs → all planned tasks complete
+- **O2 `pocs/causal/` (10 tests).** Difference-in-differences with a **holdout control** that nets
+  out background drift; reports causal uplift with a **cluster-bootstrap CI** + significance (CI
+  excludes 0), alongside the naive delta + measured drift. `demo.py` shows the drift trap: a
+  drift-only experiment reads **+0.11 naive** (looks like a win) but DiD correctly says **not
+  significant**; a real +0.15 effect is recovered as **+0.14 [0.09, 0.18]**. Validated offline on
+  simulated known-effect+known-drift data. Live before/after CLI integration is future work.
+- **A3 `docs/GA4_ATTRIBUTION.md`** (documentation-only): GA4 custom-channel-group + source-regex
+  method for AI-referral traffic, cross-referenced with the supply-side citation data; honest
+  limits (dark/Direct ⇒ lower bound; correlation not causation).
+- **A4 `docs/DEMO_WRITEUP.md`**: self-contained narrative of the live Asana run + headline finding
+  with reproduction and caveats.
+- Also fixed stale TASKS.md markers (F1/F2/F3/O1/C1 were done but unmarked). **Every task in the
+  plan is now ☑** (only cross-cutting X + small deferred niceties remain). Suite **212**, ruff clean.
 
 ### 2026-08-14 — A2 charts moved to D3.js (from Chart.js)
 - Swapped the charting layer to **all-D3 (v7, CDN)**; Chart.js removed. D3 draws the honesty

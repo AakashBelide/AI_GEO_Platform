@@ -17,13 +17,14 @@ reconciliation.**
 - **`TASKS.md`** — the concrete build plan and task graph.
 
 ## Status
-🟢 End-to-end pipeline + visual dashboard working: **202 tests passing, ruff-clean.** POCs built
-for F2/F3 (fact store + 4-engine connectors under a $2/provider budget guard), O1 (statistical
-rigor), C1 (safe crawler), R1/R3 (onboarding + keyword→prompt), R2 (metrics with confidence
-intervals), O3 (cross-engine reconciliation), A2 (local HTML dashboard). All wired behind one CLI
-(`app/geo.py`, Task A1). Live-verified on all four engines; measured cross-engine citation overlap
-≈10.6–12.7%; on a live Asana run OpenAI/Anthropic mention the brand ~80% but cite its own domain
-0% (≈$2.84 spent of $8.00). Next: O2 (causal). See `pocs/`, `app/`, and `TASKS.md`.
+🟢 All planned tasks complete: **212 tests passing, ruff-clean.** POCs built for F1–F3 (project +
+fact store + 4-engine connectors under a $2/provider budget guard), O1 (statistical rigor), O2
+(causal difference-in-differences), O3 (cross-engine reconciliation), C1 (safe crawler), R1/R3
+(onboarding + keyword→prompt), R2 (metrics with confidence intervals) — all wired behind one CLI
+(`app/geo.py`, A1), with a dark Tailwind+D3 dashboard + findings/recommendations (A2) and
+attribution/demo docs (A3/A4). Live-verified on all four engines; measured cross-engine citation
+overlap ≈10.6–12.7%; on a live Asana run OpenAI/Anthropic mention the brand ~80% but cite its own
+domain 0% (≈$2.84 spent of $8.00). See `pocs/`, `app/`, `docs/`, and `TASKS.md`.
 
 ## Quick start
 ```bash

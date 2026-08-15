@@ -25,12 +25,12 @@ plan in `TASKS.md`.
 | Core metric set with CIs (mention/citation/SoV/position/sentiment) | R2 | `pocs/metrics/` | 20 | No |
 | Keyword → prompt bootstrapping (intent-inferred, deduped) | R3 | `pocs/keyword_to_prompt/` | 14 | No |
 | Cross-engine reconciliation (overlap, SoV, divergence, methodology card) | O3 | `pocs/reconcile/` | 13 | No (live runner optional) |
-| End-to-end pipeline + `geo run` CLI (dry-run default; JSON report) | A1 | `app/` | 20 | No (offline); `--live` optional |
+| End-to-end pipeline + `geo run`/`report`/`audit` CLI | A1/C1 | `app/` | 24 | No (offline); `--live` optional |
 | Dark dashboard (Tailwind+D3: dumbbell gap, CI dot-plots, heatmap, transcript) | A2 | `pocs/dashboard/` | 24 | No |
 | Interpretation layer: findings + GEO recommendations (evidence-tied) | A2 | `pocs/insights/` | 20 | No |
 | Causal attribution (difference-in-differences + holdout control) | O2 | `pocs/causal/` | 10 | No |
 
-**Total: 212 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 216 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -51,6 +51,17 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-15 — Polish: Makefile, `geo audit`, docs consistency
+- **`Makefile`** — reproducibility one-liners: `make verify` (216 tests + ruff, all offline, $0),
+  `make demos` (the three offline demos), `make report`, `make audit`, `make help`.
+- **`geo audit`** — wired the C1 crawler into the CLI (`app/geo.py`), so **all POCs are now
+  reachable from the one entrypoint**: crawls a scrape-safe sandbox (default books.toscrape.com,
+  robots-respected, rate-limited, page-capped) and prints per-page AI-readability scores + writes
+  JSON. Core factored into a testable `run_audit` (injected fetcher) — 4 offline tests. Verified
+  live on the sandbox (2 pages, mean AI-readability 0.65). Suite **216**, ruff clean.
+- Consistency sweep of all docs (test counts, forward-looking "Next:" lines, self-contained claims)
+  — clean; refreshed README doc index (added the A3/A4 docs) and quick start.
 
 ### 2026-08-14 — O2 (causal) + A3/A4 docs → all planned tasks complete
 - **O2 `pocs/causal/` (10 tests).** Difference-in-differences with a **holdout control** that nets

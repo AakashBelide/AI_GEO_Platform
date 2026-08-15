@@ -16,6 +16,7 @@ import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import _paths  # noqa: F401  (side effect: put pocs/* on sys.path)
 from dashboard import render_dashboard
@@ -173,6 +174,55 @@ def cmd_report(args) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- #
+# `geo audit` — site-side AI-readability audit (wraps the C1 crawler POC)
+# --------------------------------------------------------------------------- #
+SANDBOX_DEFAULT = "https://books.toscrape.com/"
+
+
+def run_audit(seed_url: str, *, max_pages: int = 10, delay: float = 1.5,
+              fetch_fn=None, respect_robots: bool = True, robots_txt: str | None = None):
+    """Crawl a seed host politely and return per-page AI-readability audits.
+
+    `fetch_fn` is injectable (offline tests pass a fake); production uses the crawler's
+    httpx fetcher. The crawler enforces robots.txt + the delay + the page cap.
+    """
+    from crawler import PoliteFetcher, crawl
+
+    fetcher = PoliteFetcher(delay=delay, max_pages=max_pages, fetch_fn=fetch_fn)
+    return crawl(seed_url, fetcher, respect_robots=respect_robots, robots_txt=robots_txt)
+
+
+def cmd_audit(args) -> int:
+    """Audit the AI-readability of a scrape-safe sandbox site (Task C1, site-side)."""
+    print(f"Site-side AI-readability audit — {args.url}")
+    print("  (scrape-safe sandbox only; robots.txt respected, "
+          f"delay {args.delay}s, cap {args.max_pages} pages)\n")
+    records = run_audit(args.url, max_pages=args.max_pages, delay=args.delay)
+    if not records:
+        print("No pages fetched (robots disallow or empty site).")
+        return 0
+    scores = []
+    for rec in records:
+        a = rec.audit
+        scores.append(a.ai_readability_score)
+        print(f"  {a.ai_readability_score:.2f}  {a.url}")
+        print(f"        words={a.word_count} h1={a.h1_count} "
+              f"schema={'yes' if a.json_ld_present else 'no'} "
+              f"stat-density={a.statistic_density:.1f}")
+    mean = sum(scores) / len(scores)
+    print(f"\n  {len(records)} pages · mean AI-readability {mean:.2f} (0–1)")
+
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    host = urlparse(args.url).netloc.replace(":", "_") or "site"
+    day = datetime.now(UTC).strftime("%Y-%m-%d")
+    path = out_dir / f"audit_{host}_{day}.json"
+    path.write_text(json.dumps([r.audit.to_dict() for r in records], indent=2))
+    print(f"\nJSON audit written: {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="geo", description="Measurement-honest GEO platform.")
     sub = p.add_subparsers(dest="command", required=True)
@@ -203,6 +253,14 @@ def build_parser() -> argparse.ArgumentParser:
                           "prompts/transcript/top-domains + findings/recommendations "
                           "(no engine is re-called; zero spend)")
     rep.set_defaults(func=cmd_report)
+
+    aud = sub.add_parser("audit", help="site-side AI-readability audit of a scrape-safe sandbox")
+    aud.add_argument("--url", default=SANDBOX_DEFAULT,
+                     help=f"seed URL — sandbox only (default: {SANDBOX_DEFAULT})")
+    aud.add_argument("--max-pages", type=int, default=10, help="page cap (default 10)")
+    aud.add_argument("--delay", type=float, default=1.5, help="min delay between fetches (s)")
+    aud.add_argument("--out-dir", default="data/reports")
+    aud.set_defaults(func=cmd_audit)
     return p
 
 

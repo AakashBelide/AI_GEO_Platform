@@ -221,8 +221,8 @@ X1 testing / X2 lint / X3 docs run throughout.
 
 ### C1 ☑ Whole-site crawler + AI-readability audit (Lumar/Scrunch-style, small scale)
 > **Done:** `pocs/crawler/` (12 tests) — robots-respecting, rate-limited, sandbox-only
-> crawler + AI-readability audit (schema/JSON-LD, headings, extractability). Not yet wired
-> into the app pipeline (standalone POC).
+> crawler + AI-readability audit (schema/JSON-LD, headings, extractability). **Wired into the CLI
+> as `geo audit`** (+4 app tests; `run_audit` with an injectable fetcher for offline testing).
 - **Why:** §7.3 — attempt site-side crawling/rendering/technical audit locally to learn the
   shape of the problem. Explicitly a *learning* task, not a production crawler.
 - **Depends on:** F1 (independent of the engine work; can run in parallel).

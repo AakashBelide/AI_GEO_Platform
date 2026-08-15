@@ -38,6 +38,15 @@ uv run python app/geo.py report --input data/reports/asana_2026-08-14.json
 The dashboard shows every rate with its 95% CI, flags the mention-vs-citation gap, gives
 two-proportion-test distinguishability verdicts, and renders the methodology card verbatim.
 
+```bash
+# Site-side AI-readability audit (wraps the C1 crawler POC) — scrape-safe sandbox only
+uv run python app/geo.py audit                 # default: books.toscrape.com
+uv run python app/geo.py audit --url https://quotes.toscrape.com/ --max-pages 5 --delay 1.5
+# -> per-page AI-readability scores + writes data/reports/audit_<host>_<date>.json
+```
+Robots.txt is respected and the delay + page cap are enforced; only scrape-safe sandbox targets
+should be used (never a real client site — see `CLAUDE.md`).
+
 ## Safety / honesty
 - **Dry-run is the default and spends nothing.** Live requires the explicit `--live` flag and
   runs under the same `CostLedger` guard the connectors use — a provider can never exceed $2.

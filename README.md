@@ -13,11 +13,13 @@ reconciliation.**
 - **`docs/OBSERVATIONS_AND_ANALYSIS.md`** — standing analysis: observations, interpretation,
   measured metrics, and clearly-labeled opinions (each number cites a reproduction script).
 - **`ANALYSIS_REPORT.md`** — running log of dated decisions, costs, and live findings.
+- **`docs/DEMO_WRITEUP.md`** — the end-to-end demo narrative + headline finding (A4).
+- **`docs/GA4_ATTRIBUTION.md`** — how to detect AI-referral traffic in GA4 (A3, docs-only).
 - **`Claude_Research.md`** — an earlier research document (preserved from the remote repo).
 - **`TASKS.md`** — the concrete build plan and task graph.
 
 ## Status
-🟢 All planned tasks complete: **212 tests passing, ruff-clean.** POCs built for F1–F3 (project +
+🟢 All planned tasks complete: **216 tests passing, ruff-clean.** POCs built for F1–F3 (project +
 fact store + 4-engine connectors under a $2/provider budget guard), O1 (statistical rigor), O2
 (causal difference-in-differences), O3 (cross-engine reconciliation), C1 (safe crawler), R1/R3
 (onboarding + keyword→prompt), R2 (metrics with confidence intervals) — all wired behind one CLI
@@ -28,15 +30,19 @@ domain 0% (≈$2.84 spent of $8.00). See `pocs/`, `app/`, `docs/`, and `TASKS.md
 
 ## Quick start
 ```bash
-uv sync
-uv run pytest                              # 145 tests, offline
+make install                # uv sync
+make verify                 # 216 tests + ruff, all offline ($0)   (or: make help)
+
 # End-to-end dry-run (synthetic, $0):
 uv run python app/geo.py run --brand "Asana" --category "project management software" \
     --target-domain asana.com --competitor-domains monday.com,trello.com,clickup.com
 # add --live to call real engines under the $2/provider budget guard
 
-# Render a saved report into a visual HTML dashboard (opens in a browser, no server):
+# Render a saved report into a visual (Tailwind+D3) HTML dashboard:
 uv run python app/geo.py report --input data/reports/asana_2026-08-14.json
+
+# Site-side AI-readability audit of a scrape-safe sandbox:
+uv run python app/geo.py audit          # (or: make audit)
 ```
 
 ## Requirements (already on the dev machine — no new global installs)

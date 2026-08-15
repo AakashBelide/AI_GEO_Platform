@@ -1,0 +1,33 @@
+# One-command local stack: FastAPI backend + Next.js frontend.
+#   1. cp .env.example .env   (add your API keys if you want live runs; dry-run needs none)
+#   2. docker compose up --build
+#   3. open http://localhost:3000
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env                       # API keys + BUDGET_USD_PER_PROVIDER (optional for dry-run)
+    environment:
+      - GEO_APP_DB=/app/data/app.db
+      - GEO_CORS_ORIGINS=http://localhost:3000
+    volumes:
+      - ./data:/app/data           # persist app.db + fact store across restarts (host-side, gitignored)
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web
+      args:
+        # Next.js inlines NEXT_PUBLIC_* at BUILD time; the browser calls the API on the host port.
+        NEXT_PUBLIC_API_BASE: http://localhost:8000
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    depends_on:
+      - api
+    restart: unless-stopped

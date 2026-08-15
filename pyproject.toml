@@ -13,6 +13,8 @@ dependencies = [
     "openai>=1.40",
     "anthropic>=0.40",
     "google-genai>=0.3",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
 ]
 
 [dependency-groups]
@@ -22,9 +24,10 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["pocs", "app"]
+testpaths = ["pocs", "app", "server"]
 python_files = ["test_*.py"]
 addopts = "-q"
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

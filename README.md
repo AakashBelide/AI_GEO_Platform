@@ -11,7 +11,9 @@ commercial GEO market hides.
 > report any statistical confidence.** This project builds the honest version: confidence
 > intervals, cross-engine reconciliation, causal attribution, and the underlying evidence.
 
-**Status:** 🟢 complete — **216 tests passing, ruff-clean**, live-verified on all four engines.
+**Status:** 🟢 **224 tests passing, ruff-clean**, live-verified on all four engines. Ships as a
+CLI *and* a Dockerized web app (FastAPI + Next.js + SQLite) that analyzes **any brand** — see
+[Run with Docker](#web-app-dynamic-multi-brand--run-with-docker).
 
 ---
 
@@ -73,6 +75,8 @@ Every capability was built and tested as a POC first, then wired behind one CLI 
 | `pocs/insights` | evidence-tied findings + hedged GEO recommendations | 20 |
 | `pocs/dashboard` | GeoReport → dark **Tailwind + D3** HTML dashboard | 24 |
 | `app/` | the `geo` CLI (`run` / `report` / `audit`) wiring it all together | 33 |
+| `server/` | FastAPI + SQLite web API over the pipeline (dry-run) | 8 |
+| `web/` | Next.js frontend (form → report → history); dark theme, iframes the D3 dashboard | — |
 
 ---
 
@@ -82,7 +86,7 @@ Requires **Python 3.11+** and [uv](https://docs.astral.sh/uv/). No other global 
 
 ```bash
 make install                 # uv sync
-make verify                  # 216 tests + ruff, all offline ($0)   (make help for all targets)
+make verify                  # 224 tests + ruff, all offline ($0)   (make help for all targets)
 
 # End-to-end DRY-RUN (synthetic data, $0, deterministic — the default):
 uv run python app/geo.py run --brand "Asana" --category "project management software" \
@@ -109,6 +113,57 @@ Live runs default to the cheapest capable models (`gpt-4o-mini`, `sonar`, `gemin
 its $2 cap. The dashboard loads Tailwind + D3 from CDNs, so *viewing* it needs internet.
 
 ---
+
+## Web app (dynamic, multi-brand) — run with Docker
+
+A FastAPI backend + Next.js frontend let anyone analyze **any brand** from the browser and browse
+past runs (stored in SQLite). The whole stack comes up with one command.
+
+```bash
+# 1. Provide env vars (dry-run needs no keys; see "Environment variables" below)
+cp .env.example .env          # edit .env if you want to add keys / change the budget
+
+# 2. Build + start both services
+docker compose up --build
+
+# 3. Open the app
+#    Frontend  → http://localhost:3000
+#    API docs  → http://localhost:8000/docs   (FastAPI Swagger UI)
+```
+
+That's it — a new person only edits `.env` and runs `docker compose up --build`. The backend
+persists runs/reports to `./data` (mounted volume, gitignored) so history survives restarts.
+
+**What the web UI does:** enter a brand + category + competitors → get the full report (per-engine
+metrics **with confidence intervals**, the mention-vs-citation gap, cross-engine reconciliation,
+findings + recommendations, and the interactive dashboard) → all runs saved under **History**.
+
+> **Note — the web UI runs in DRY-RUN mode** (deterministic synthetic data, **$0**, no keys
+> needed) so it's safe to demo and can't spend money. **Live** runs (real engines, real cost) are
+> intentionally available only via the CLI (`uv run python app/geo.py run … --live`) in this
+> build, so a public/hosted UI can never rack up charges.
+
+### Environment variables
+
+| Var | For | Needed? | Default |
+|---|---|---|---|
+| `OPENAI_API_KEY`, `PERPLEXITY_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY` | live engine calls (CLI) | only for `--live` | — |
+| `BUDGET_USD_PER_PROVIDER` | hard per-provider spend cap on live runs | no | `2.00` |
+| `GEO_APP_DB` | backend run/report index (SQLite) | no | `data/app.db` |
+| `GEO_CORS_ORIGINS` | browser origin allowed to call the API | no | `http://localhost:3000` |
+| `NEXT_PUBLIC_API_BASE` | API base the browser calls (inlined at build) | no | `http://localhost:8000` |
+
+**Keys never reach the browser** — they're read server-side only; `/api/health` reports which
+engines are configured as booleans, never values. The dashboard loads Tailwind + D3 from CDNs, so
+viewing it needs internet.
+
+### Run without Docker (local dev)
+```bash
+# Backend (terminal 1)
+uv sync && uv run uvicorn server.main:app --reload      # http://localhost:8000
+# Frontend (terminal 2)
+cd web && npm install && npm run dev                     # http://localhost:3000
+```
 
 ## Documentation
 

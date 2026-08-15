@@ -1,0 +1,23 @@
+# Backend (Dockerfile.api) build context is the repo root — keep the image lean and
+# never bake secrets or local run data into it.
+.git
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+htmlcov
+.coverage
+
+# Never copy secrets or local data into the image (provided at runtime instead).
+.env
+.env.*
+!.env.example
+secrets/
+data/
+
+# The backend image does not need the frontend.
+web/
+node_modules/

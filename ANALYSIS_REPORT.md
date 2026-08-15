@@ -30,7 +30,9 @@ plan in `TASKS.md`.
 | Interpretation layer: findings + GEO recommendations (evidence-tied) | A2 | `pocs/insights/` | 20 | No |
 | Causal attribution (difference-in-differences + holdout control) | O2 | `pocs/causal/` | 10 | No |
 
-**Total: 216 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+| Web API (FastAPI + SQLite index, dry-run over the pipeline) | webapp | `server/` | 8 | No |
+
+**Total: 224 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)
@@ -51,6 +53,26 @@ mocked/replayed, crawler uses fixtures) so the suite never spends budget or touc
 Overridable via `.env` (`OPENAI_MODEL`, `PERPLEXITY_MODEL`, `GEMINI_MODEL`, `ANTHROPIC_MODEL`).
 
 ## 5. Run log & findings
+
+### 2026-08-15 — Web app: dynamic multi-brand product (FastAPI + Next.js + SQLite + Docker)
+- Wrapped the (already brand-agnostic) pipeline in a **web app** so any brand can be analyzed from a
+  browser — not just the Asana demo. Built the free dry-run slice (W0→W1→W4 of `docs/WEBAPP_PLAN.md`):
+  - **`server/`** — FastAPI + SQLite index (`app.db`): `POST /api/runs` (dry-run, synchronous, $0),
+    `GET /api/runs[/{id}[/report[.html]]]`, `/api/brands`, `/api/estimate`, `/api/health`. Reuses
+    `pipeline`/`dashboard` unchanged via `bootstrap.ensure_paths()`. **Live gated (HTTP 400)** so the
+    web surface can't spend money; **keys stay server-side** (health returns booleans only). 8
+    TestClient tests. `pyproject` gains fastapi + uvicorn; pytest `pythonpath=["."]`.
+  - **`web/`** — Next.js 16 / React 19 / TS (dark theme): New Analysis form (dry-run default, Live
+    disabled with a money note), Report page (synthetic banner, stat tiles, verbatim findings +
+    recommendations, per-engine table with **CIs**, and the D3 dashboard via `<iframe>`), History.
+    `npm run build` green (standalone output).
+  - **Docker** — `Dockerfile.api` (uv) + `web/Dockerfile` (node:22 standalone) + `docker-compose.yml`
+    (+ `.dockerignore`, `.env.example`): `cp .env.example .env && docker compose up --build` →
+    frontend `:3000`, API `:8000`. `./data` mounted so history persists.
+- **Verified end-to-end over real HTTP** (uvicorn, not just TestClient) on a NON-Asana brand
+  (Notion): dry-run → report with per-engine CIs (openai citation 0.267 [0.171, 0.390], n=60), 5
+  findings, 4 recommendations, overlap 0.33; history + `report.html` served. Suite now **224**, ruff
+  clean. (Docker images not built locally — daemon was down; compose validated, `uv.lock` present.)
 
 ### 2026-08-15 — Polish: Makefile, `geo audit`, docs consistency
 - **`Makefile`** — reproducibility one-liners: `make verify` (216 tests + ruff, all offline, $0),

@@ -1,5 +1,12 @@
 # Web-app plan — turn the CLI into a dynamic, multi-brand product
 
+> **Status (2026-08-15): the free dry-run slice (W0→W1→W4) is BUILT and Dockerized.**
+> `server/` (FastAPI + SQLite, 8 tests) + `web/` (Next.js, `npm run build` green) + `Dockerfile.api`
+> + `web/Dockerfile` + `docker-compose.yml` → `docker compose up --build` runs the whole stack;
+> a user analyzes *any* brand (dry-run, $0) from the browser and browses history. Verified live over
+> HTTP end-to-end (e.g. Notion). Remaining: W2/W3/W7 (background jobs + cost-gated live runs in the
+> UI), W5 (richer history/brand profiles), W6 (native React+D3 charts instead of the iframe).
+
 **Premise correction (important):** the measurement engine is **already brand-agnostic**.
 `app/pipeline.py:run_pipeline(GeoConfig(...))` accepts any brand/category/competitors/engines and
 returns a full `GeoReport` (metrics + CIs, reconciliation, findings, recommendations, transcript);

@@ -1,0 +1,23 @@
+# Backend image: FastAPI API that reuses the existing pipeline (app/ + pocs/).
+FROM python:3.12-slim
+
+# uv for fast, lockfile-based installs (the project's package manager).
+RUN pip install --no-cache-dir uv
+
+WORKDIR /app
+
+# Install dependencies first (cached layer). --no-install-project: this repo is a flat
+# module set, not a build-able package, so we only want its declared deps.
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --no-dev --no-install-project
+
+# App code (server/, app/, pocs/). data/ and secrets are excluded via .dockerignore
+# and provided at runtime (env vars + a mounted volume).
+COPY . .
+
+ENV GEO_APP_DB=/app/data/app.db \
+    GEO_CORS_ORIGINS=http://localhost:3000 \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+CMD ["uv", "run", "--no-dev", "uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000"]

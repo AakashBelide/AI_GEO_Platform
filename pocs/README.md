@@ -22,7 +22,7 @@ mocked/replayed; crawler uses saved fixtures).
 | `insights/` | A2 — findings + GEO recommendations (evidence-tied) | No | ☑ 20 tests |
 | `causal/` | O2 — controlled before/after attribution (DiD + holdout) | No (synthetic) | ☑ 10 tests |
 
-**216 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
+**224 tests passing, ruff clean.** See `../TASKS.md` for subtasks/dependencies and
 `../ANALYSIS_REPORT.md` for the running log of decisions, costs, and live findings.
 Every suite runs fully offline; live engine calls happen only in `connectors/smoke.py`
 under the $2/provider budget guard.

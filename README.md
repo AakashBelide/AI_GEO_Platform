@@ -11,7 +11,7 @@ commercial GEO market hides.
 > report any statistical confidence.** This project builds the honest version: confidence
 > intervals, cross-engine reconciliation, causal attribution, and the underlying evidence.
 
-**Status:** 🟢 **224 tests passing, ruff-clean**, live-verified on all four engines. Ships as a
+**Status:** 🟢 **229 tests passing, ruff-clean**, live-verified on all four engines. Ships as a
 CLI *and* a Dockerized web app (FastAPI + Next.js + SQLite) that analyzes **any brand** — see
 [Run with Docker](#web-app-dynamic-multi-brand--run-with-docker).
 
@@ -75,7 +75,7 @@ Every capability was built and tested as a POC first, then wired behind one CLI 
 | `pocs/insights` | evidence-tied findings + hedged GEO recommendations | 20 |
 | `pocs/dashboard` | GeoReport → dark **Tailwind + D3** HTML dashboard | 24 |
 | `app/` | the `geo` CLI (`run` / `report` / `audit`) wiring it all together | 33 |
-| `server/` | FastAPI + SQLite web API over the pipeline (dry-run) | 8 |
+| `server/` | FastAPI + SQLite web API over the pipeline (dry-run; multi-brand tested) | 13 |
 | `web/` | Next.js frontend (form → report → history); dark theme, iframes the D3 dashboard | — |
 
 ---
@@ -86,7 +86,7 @@ Requires **Python 3.11+** and [uv](https://docs.astral.sh/uv/). No other global 
 
 ```bash
 make install                 # uv sync
-make verify                  # 224 tests + ruff, all offline ($0)   (make help for all targets)
+make verify                  # 229 tests + ruff, all offline ($0)   (make help for all targets)
 
 # End-to-end DRY-RUN (synthetic data, $0, deterministic — the default):
 uv run python app/geo.py run --brand "Asana" --category "project management software" \

@@ -30,9 +30,9 @@ plan in `TASKS.md`.
 | Interpretation layer: findings + GEO recommendations (evidence-tied) | A2 | `pocs/insights/` | 20 | No |
 | Causal attribution (difference-in-differences + holdout control) | O2 | `pocs/causal/` | 10 | No |
 
-| Web API (FastAPI + SQLite index, dry-run over the pipeline) | webapp | `server/` | 8 | No |
+| Web API (FastAPI + SQLite index; multi-brand + edge-case tested) | webapp | `server/` | 13 | No |
 
-**Total: 224 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
+**Total: 229 tests passing, ruff clean.** Every POC runs its suite fully offline (external APIs
 mocked/replayed, crawler uses fixtures) so the suite never spends budget or touches the network.
 
 ## 3. Cost controls (money safety)

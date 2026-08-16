@@ -97,3 +97,42 @@ def test_save_brand_then_list(client):
     brands = client.get("/api/brands").json()
     assert any(b["name"] == "Acme Board" for b in brands)
     assert brands[0]["competitors"]  # JSON round-trips back to a list
+
+
+# --- the app is dynamic: it works for ANY brand, not just the demo -------- #
+# (brand, category, target_domain, competitor_domains, engines)
+_MULTI_BRAND = [
+    ("Nike", "athletic footwear", "nike.com", ["adidas.com", "puma.com"],
+     ["openai", "perplexity", "gemini", "anthropic"]),
+    ("Stripe", "payment processing", "stripe.com", ["paypal.com", "squareup.com"],
+     ["openai", "perplexity", "gemini"]),
+    ("Café Numérique", "digital agency", "cafe-num.fr", ["rivalx.fr"],   # unicode brand
+     ["openai", "gemini"]),
+    ("SmallCo", "niche B2B widgets", None, [],                            # no domains
+     ["openai", "perplexity", "gemini"]),
+    ("SoloBrand", "SaaS", "solo.io", ["comp.io"], ["openai"]),           # single engine
+]
+
+
+@pytest.mark.parametrize("brand,cat,tgt,comps,engines", _MULTI_BRAND)
+def test_dry_run_works_across_brands_and_edge_cases(client, brand, cat, tgt, comps, engines):
+    body = {
+        "brand": brand, "category": cat, "target_domain": tgt,
+        "competitor_domains": comps, "competitors": [c.split(".")[0] for c in comps],
+        "engines": engines, "n_prompts": 12, "repeats": 5, "seed": 3,
+    }
+    r = client.post("/api/runs", json=body)
+    assert r.status_code == 200, r.text
+    rep = r.json()["report"]
+    assert rep["brand"] == brand
+    assert set(rep["per_engine_metrics"]) == set(engines)
+    # honesty invariant: every rate carries a valid confidence interval
+    for m in rep["per_engine_metrics"].values():
+        for k in ("mention", "citation", "share_of_voice"):
+            assert m[k]["lo"] <= m[k]["point"] <= m[k]["hi"]
+    # reconciliation appears only with >=2 engines AND a domain universe; else empty (no crash)
+    if len(engines) >= 2 and (tgt or comps):
+        assert rep["reconciliation"]["overlap"]["n_engines"] == len(engines)
+    else:
+        assert rep["reconciliation"] == {}
+    assert rep["recommendations"]  # insights layer always produces guidance
